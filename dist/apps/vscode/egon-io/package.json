@@ -1,0 +1,66 @@
+{
+  "displayName": "Egon.io — The Domain Story Modeler",
+  "description": "Write your (domain) story in a visual way with Egon.io.",
+  "version": "0.2.1",
+  "publisher": "miragon-gmbh",
+  "engines": {
+    "vscode": "^1.76.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "DDD",
+    "Domain Driven Design",
+    "Domain Storytelling",
+    "diagram-js"
+  ],
+  "icon": "assets/egon-io-logo.png",
+  "contributes": {
+    "customEditors": [
+      {
+        "id": "egon.io",
+        "viewType": "egon.io",
+        "displayName": "Egon.io: Domain Story Modeler",
+        "selector": [
+          {
+            "filenamePattern": "*.egn"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "menus": {},
+    "configuration": {}
+  },
+  "badges": [
+    {
+      "url": "https://img.shields.io/badge/Follow-@miragon__io-1DA1F2?style=social&logo=twitter&logoColor=1DA1F2",
+      "href": "https://twitter.com/miragon_io",
+      "description": "Our Twitter profile."
+    },
+    {
+      "url": "https://img.shields.io/badge/Follow-miragon-blue?style=social&logo=linkedin&logoColor=blue&url=https://www.linkedin.com/company/miragon-io",
+      "href": "https://www.linkedin.com/company/miragon-io",
+      "description": "Our LinkedIn profile."
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Miragon/egon.io.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Miragon/egon.io/issues"
+  },
+  "homepage": "https://www.miragon.io/",
+  "preview": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "name": "egon-vscode-extension",
+  "main": "main.js",
+  "dependencies": {
+    "reflect-metadata": "0.2.2",
+    "tsyringe": "4.8.0"
+  },
+  "packageManager": "yarn@4.6.0"
+}

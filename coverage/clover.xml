@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1765124915666" clover="3.2.0">
+  <project timestamp="1765124915666" name="All files">
+    <metrics statements="116" coveredstatements="81" conditionals="31" coveredconditionals="7" methods="30" coveredmethods="17" elements="177" coveredelements="105" complexity="0" loc="116" ncloc="116" packages="5" files="13" classes="13"/>
+    <package name="application">
+      <metrics statements="29" coveredstatements="29" conditionals="5" coveredconditionals="5" methods="8" coveredmethods="8"/>
+      <file name="DomainStoryEditorService.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/application/DomainStoryEditorService.ts">
+        <metrics statements="29" coveredstatements="29" conditionals="5" coveredconditionals="5" methods="8" coveredmethods="8"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="76" count="1" type="stmt"/>
+        <line num="77" count="28" type="stmt"/>
+        <line num="84" count="28" type="stmt"/>
+        <line num="106" count="32" type="stmt"/>
+        <line num="107" count="32" type="stmt"/>
+        <line num="108" count="32" type="stmt"/>
+        <line num="109" count="3" type="stmt"/>
+        <line num="110" count="3" type="stmt"/>
+        <line num="113" count="32" type="stmt"/>
+        <line num="119" count="32" type="stmt"/>
+        <line num="140" count="18" type="stmt"/>
+        <line num="141" count="18" type="cond" truecount="1" falsecount="0"/>
+        <line num="142" count="16" type="stmt"/>
+        <line num="171" count="12" type="stmt"/>
+        <line num="172" count="12" type="cond" truecount="1" falsecount="0"/>
+        <line num="173" count="11" type="stmt"/>
+        <line num="174" count="11" type="stmt"/>
+        <line num="175" count="11" type="stmt"/>
+        <line num="176" count="11" type="stmt"/>
+        <line num="203" count="8" type="stmt"/>
+        <line num="204" count="8" type="cond" truecount="3" falsecount="0"/>
+        <line num="205" count="2" type="stmt"/>
+        <line num="207" count="6" type="stmt"/>
+        <line num="208" count="6" type="stmt"/>
+        <line num="226" count="4" type="stmt"/>
+        <line num="236" count="38" type="stmt"/>
+        <line num="240" count="11" type="stmt"/>
+      </file>
+    </package>
+    <package name="domain">
+      <metrics statements="11" coveredstatements="11" conditionals="0" coveredconditionals="0" methods="4" coveredmethods="4"/>
+      <file name="EditorSession.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/EditorSession.ts">
+        <metrics statements="8" coveredstatements="8" conditionals="0" coveredconditionals="0" methods="4" coveredmethods="4"/>
+        <line num="42" count="2" type="stmt"/>
+        <line num="50" count="46" type="stmt"/>
+        <line num="51" count="46" type="stmt"/>
+        <line num="60" count="31" type="stmt"/>
+        <line num="72" count="17" type="stmt"/>
+        <line num="73" count="17" type="stmt"/>
+        <line num="89" count="18" type="stmt"/>
+        <line num="90" count="18" type="stmt"/>
+      </file>
+      <file name="index.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/index.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+      </file>
+    </package>
+    <package name="domain.icons">
+      <metrics statements="32" coveredstatements="15" conditionals="17" coveredconditionals="2" methods="5" coveredmethods="1"/>
+      <file name="IconName.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/icons/IconName.ts">
+        <metrics statements="9" coveredstatements="1" conditionals="10" coveredconditionals="0" methods="3" coveredmethods="0"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="0" type="stmt"/>
+        <line num="5" count="0" type="cond" truecount="0" falsecount="4"/>
+        <line num="6" count="0" type="cond" truecount="0" falsecount="4"/>
+        <line num="7" count="0" type="cond" truecount="0" falsecount="1"/>
+        <line num="8" count="0" type="stmt"/>
+        <line num="12" count="0" type="stmt"/>
+        <line num="13" count="0" type="cond" truecount="0" falsecount="1"/>
+        <line num="14" count="0" type="stmt"/>
+      </file>
+      <file name="IconPathParser.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/icons/IconPathParser.ts">
+        <metrics statements="15" coveredstatements="6" conditionals="5" coveredconditionals="0" methods="1" coveredmethods="0"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="5" count="1" type="stmt"/>
+        <line num="6" count="1" type="stmt"/>
+        <line num="13" count="1" type="stmt"/>
+        <line num="14" count="0" type="stmt"/>
+        <line num="17" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="18" count="0" type="stmt"/>
+        <line num="19" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="20" count="0" type="stmt"/>
+        <line num="22" count="0" type="stmt"/>
+        <line num="25" count="0" type="stmt"/>
+        <line num="26" count="0" type="cond" truecount="0" falsecount="1"/>
+        <line num="28" count="0" type="stmt"/>
+      </file>
+      <file name="IconType.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/icons/IconType.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="1" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+      </file>
+      <file name="index.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/icons/index.ts">
+        <metrics statements="5" coveredstatements="5" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="5" count="1" type="stmt"/>
+      </file>
+    </package>
+    <package name="domain.story">
+      <metrics statements="30" coveredstatements="12" conditionals="9" coveredconditionals="0" methods="9" coveredmethods="0"/>
+      <file name="EmptyStoryFactory.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/story/EmptyStoryFactory.ts">
+        <metrics statements="4" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="0"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="9" count="1" type="stmt"/>
+        <line num="20" count="1" type="stmt"/>
+        <line num="21" count="0" type="stmt"/>
+      </file>
+      <file name="StoryIcons.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/story/StoryIcons.ts">
+        <metrics statements="15" coveredstatements="2" conditionals="6" coveredconditionals="0" methods="6" coveredmethods="0"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="5" count="0" type="stmt"/>
+        <line num="8" count="0" type="stmt"/>
+        <line num="9" count="0" type="stmt"/>
+        <line num="13" count="0" type="stmt"/>
+        <line num="14" count="0" type="stmt"/>
+        <line num="18" count="0" type="cond" truecount="0" falsecount="3"/>
+        <line num="21" count="0" type="cond" truecount="0" falsecount="1"/>
+        <line num="22" count="0" type="stmt"/>
+        <line num="27" count="0" type="stmt"/>
+        <line num="29" count="0" type="stmt"/>
+        <line num="30" count="0" type="stmt"/>
+        <line num="35" count="0" type="stmt"/>
+        <line num="39" count="0" type="cond" truecount="0" falsecount="2"/>
+      </file>
+      <file name="StorySerialization.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/story/StorySerialization.ts">
+        <metrics statements="7" coveredstatements="3" conditionals="3" coveredconditionals="0" methods="2" coveredmethods="0"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="7" count="0" type="cond" truecount="0" falsecount="3"/>
+        <line num="8" count="0" type="stmt"/>
+        <line num="10" count="0" type="stmt"/>
+        <line num="13" count="1" type="stmt"/>
+        <line num="14" count="0" type="stmt"/>
+      </file>
+      <file name="index.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/domain/story/index.ts">
+        <metrics statements="4" coveredstatements="4" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+      </file>
+    </package>
+    <package name="infrastructure">
+      <metrics statements="14" coveredstatements="14" conditionals="0" coveredconditionals="0" methods="4" coveredmethods="4"/>
+      <file name="VsCodeDocumentPort.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/infrastructure/VsCodeDocumentPort.ts">
+        <metrics statements="9" coveredstatements="9" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="24" count="1" type="stmt"/>
+        <line num="33" count="4" type="stmt"/>
+        <line num="34" count="4" type="stmt"/>
+        <line num="35" count="3" type="stmt"/>
+        <line num="51" count="6" type="stmt"/>
+        <line num="52" count="6" type="stmt"/>
+        <line num="53" count="6" type="stmt"/>
+        <line num="54" count="6" type="stmt"/>
+      </file>
+      <file name="VsCodeViewPort.ts" path="/Users/peterhnm/Projects/egon.io/vscode/libs/vscode/domain-story/src/infrastructure/VsCodeViewPort.ts">
+        <metrics statements="5" coveredstatements="5" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="23" count="1" type="stmt"/>
+        <line num="29" count="11" type="stmt"/>
+        <line num="44" count="16" type="stmt"/>
+        <line num="45" count="16" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>
