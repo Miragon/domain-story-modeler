@@ -64,26 +64,26 @@ Don't forget to give the project a star! Thanks again!
 
 ## License
 
-Distributed under this [GPLv3](https://github.com/Miragon/egon.io/blob/dbd0fb34b29e9e1f38e29feb2075bfdff2bfef88/monorepo/egon/LICENSE).
+Distributed under this [GPLv3](https://github.com/Miragon/domain-story-modeler/blob/d8b17002932773712f6757d715b89dd6c65616af/LICENSE).
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 
-[contributors-shield]: https://img.shields.io/github/contributors/wps/egon.io.svg?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/Miragon/domain-story-modeler.svg?style=for-the-badge
 
-[contributors-url]: https://github.com/wps/egon.io/graphs/contributors
+[contributors-url]: https://github.com/Miragon/domain-story-modeler/graphs/contributors
 
-[forks-shield]: https://img.shields.io/github/forks/wps/egon.io.svg?style=for-the-badge
+[forks-shield]: https://img.shields.io/github/forks/Miragon/domain-story-modeler.svg?style=for-the-badge
 
-[forks-url]: https://github.com/wps/egon.io/network/members
+[forks-url]: https://github.com/Miragon/domain-story-modeler/network/members
 
-[stars-shield]: https://img.shields.io/github/stars/wps/egon.io.svg?style=for-the-badge
+[stars-shield]: https://img.shields.io/github/stars/Miragon/domain-story-modeler.svg?style=for-the-badge
 
-[stars-url]: https://github.com/wps/egon.io/stargazers
+[stars-url]: https://github.com/Miragon/domain-story-modeler/stargazers
 
-[issues-shield]: https://img.shields.io/github/issues/Miragon/egon.io.svg?style=for-the-badge
+[issues-shield]: https://img.shields.io/github/issues/Miragon/domain-story-modeler.svg?style=for-the-badge
 
-[issues-url]: https://github.com/Miragon/egon.io/issues
+[issues-url]: https://github.com/Miragon/domain-story-modeler/issues
 
 [license-shield]: https://img.shields.io/badge/license-GPLv3-blue.svg?style=for-the-badge
 
