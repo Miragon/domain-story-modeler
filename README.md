@@ -41,6 +41,7 @@ See [here](docs/CustomIcons.md) for a more detailed description.
 
 - [Domain Storytelling](http://domainstorytelling.org)
 - [User Guide](https://egon.io/howto#palette)
+- [Repository automation and releases](docs/repository-automation.md)
 
 ## Contributing
 

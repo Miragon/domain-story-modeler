@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "0cba33c1200f65457a78992b08fb05fb0c2a2fbd",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "changelog-path": "CHANGELOG.md",
+  "changelog-sections": [
+    { "type": "feat", "section": "🎉 New Features" },
+    { "type": "fix", "section": "🐞 Bug Fixes" },
+    { "type": "refactor", "section": "🔨 Refactoring" },
+    { "type": "docs", "section": "📔 Documentation" },
+    { "type": "chore", "section": "🛠️ Misc" }
+  ],
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "component": "domain-story-modeler",
+      "initial-version": "0.2.1",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "apps/vscode/egon-modeler-plugin/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,84 @@
+name: Bug Report
+description: Report a problem with the Domain Story Modeler extension
+type: Bug
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Clearly describe the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Tell us how to reproduce the behavior.
+      placeholder: |
+        1. Open a .egn file
+        2. Select ...
+        3. See ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Tell us what you expected to happen.
+    validations:
+      required: true
+
+  - type: input
+    id: extension_version
+    attributes:
+      label: Extension version
+      placeholder: e.g. 0.2.1
+    validations:
+      required: true
+
+  - type: input
+    id: vscode_version
+    attributes:
+      label: VS Code version
+      placeholder: e.g. 1.98.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant Extension Host or developer console logs. Remove secrets first.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example .egn file
+      description: Optionally attach a minimal .egn file that reproduces the issue. Remove confidential data first.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add screenshots or any other useful details.
+    validations:
+      required: false
