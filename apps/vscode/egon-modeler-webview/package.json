@@ -9,6 +9,6 @@
     "serve": "vite"
   },
   "dependencies": {
-    "diagram-js-minimap": "5.2.0"
+    "diagram-js-minimap": "5.4.1"
   }
 }
