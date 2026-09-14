@@ -1,0 +1,39 @@
+name: Feature Request
+description: Suggest an improvement to the Domain Story Modeler
+type: Feature
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve the Domain Story Modeler!
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem or limitation would this feature address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you would like.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any workarounds or alternative designs you considered.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add examples, screenshots, or mockups if useful.
+    validations:
+      required: false

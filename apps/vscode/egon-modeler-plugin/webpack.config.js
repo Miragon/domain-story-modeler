@@ -108,7 +108,7 @@ module.exports = (env, argv) => {
                                 "reflect-metadata": "0.2.2",
                                 tsyringe: "4.8.0",
                             };
-                            out.packageManager = "yarn@4.6.0";
+                            out.packageManager = "yarn@4.18.0";
                             return Buffer.from(JSON.stringify(out, null, 2));
                         },
                     },

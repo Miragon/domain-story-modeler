@@ -18,7 +18,7 @@
   - vscode/egon-modeler-webview (TypeScript webview) - built with Vite
 - **Libs**: diagram-js-egon-plugin/ (core diagram.js plugin), vscode/ (shared VS Code library)
 - **Framework**: VS Code, TypeScript, diagram.js for canvas rendering
-- **Package Manager**: Yarn 4.6.0
+- **Package Manager**: Yarn 4.18.0
 - **Build Output**: 
   - Libraries: dist/libs/ (separate builds with .d.ts files)
   - Extension: dist/apps/vscode/egon-io/ (self-contained bundle, ready for vsce packaging)
