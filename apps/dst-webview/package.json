@@ -1,0 +1,15 @@
+{
+  "name": "egon-modeler-webview",
+  "version": "0.1.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "vite build",
+    "serve": "vite"
+  },
+  "dependencies": {
+    "diagram-js-minimap": "5.2.0",
+    "egon-core": "https://github.com/Miragon/egon-core/releases/download/v0.2.0/egon-core-0.2.0.tgz"
+  }
+}

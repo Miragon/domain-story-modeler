@@ -29,13 +29,6 @@ jobs:
       - uses: ./.github/actions/setup
       - run: yarn test:jest
 
-  test-vitest:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-      - run: yarn test:vitest
-
   build:
     runs-on: ubuntu-latest
     steps:
@@ -70,7 +63,6 @@ jobs:
     needs:
       - lint
       - test-jest
-      - test-vitest
       - build
       - dependency-pins
       - dependency-review

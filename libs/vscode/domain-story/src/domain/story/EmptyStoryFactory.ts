@@ -19,11 +19,16 @@ const DEFAULT_WORK_OBJECTS = {
 
 export function createEmptyStory(): DomainStoryDocument {
     return {
-        domain: {
+        iconSet: {
             name: "default",
             actors: { ...DEFAULT_ACTORS },
             workObjects: { ...DEFAULT_WORK_OBJECTS },
         },
-        dst: [{ info: "" }, { version: "3.0.0" }],
+        domainStory: {
+            businessObjects: [],
+            title: "",
+            description: "",
+            version: "4.0.0",
+        },
     };
 }

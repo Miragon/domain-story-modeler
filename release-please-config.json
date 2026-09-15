@@ -21,7 +21,7 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "apps/vscode/egon-modeler-plugin/package.json",
+          "path": "apps/dst-plugin/package.json",
           "jsonpath": "$.version"
         }
       ]

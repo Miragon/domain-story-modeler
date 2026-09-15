@@ -35,9 +35,8 @@ yarn serve
 
 ### Monorepo Structure (Yarn Workspaces)
 
-- **apps/vscode/egon-modeler-plugin** - VS Code extension entry point (webpack bundled)
-- **apps/vscode/egon-modeler-webview** - Webview UI that renders the diagram-js canvas (Vite bundled)
-- **libs/diagram-js-egon-plugin** - Core diagram-js modules for Domain Story modeling
+- **apps/dst-plugin** - VS Code extension entry point (webpack bundled)
+- **apps/dst-webview** - Webview UI that renders the diagram-js canvas with `egon-core` (Vite bundled)
 - **libs/vscode/domain-story** - Application layer with DDD architecture (domain, application, infrastructure)
 - **libs/vscode/data-transfer-objects** - Command DTOs for plugin ↔ webview communication
 
@@ -55,17 +54,12 @@ Three-layer architecture with dependency injection via tsyringe:
 3. **Infrastructure Layer** - VS Code API implementations
    - `VsCodeDocumentPort`, `VsCodeViewPort` - Adapt VS Code APIs to ports
 
-### diagram-js Plugin System (libs/diagram-js-egon-plugin)
+### Modeler core
 
-Custom diagram-js modules in `src/features/`:
-- `palette/` - Toolbar with actor/work-object icons
-- `context-pad/` - Context actions for selected elements
-- `renderer/` - SVG rendering for domain story elements
-- `labeling/` - Text editing and label positioning
-- `modeling/` - Element creation and manipulation
-- `copy-paste/` - Clipboard operations
-- `replace/` - Element type replacement
-- `popup/` - Numbering and popup menus
+The diagram-js modeler is supplied by the pinned
+[`egon-core`](https://github.com/Miragon/egon-core) release. Its public client
+and stylesheet are consumed by `apps/dst-webview`; core internals are maintained
+in the upstream repository.
 
 ### Plugin ↔ Webview Communication
 
