@@ -4,9 +4,8 @@
 
 This is a VS Code extension for "Domain Storytelling". It allows users to edit `.egn` files, which are used to model domain stories. The extension is a monorepo managed with Yarn, and it consists of several packages:
 
-* **`apps/vscode/egon-modeler-plugin`**: The main VS Code extension. It contributes a custom editor for `.egn` files.
-* **`apps/vscode/egon-modeler-webview`**: A webview that is responsible for rendering the diagrams. It is a single-page application (SPA) built with Vite.
-* **`libs/diagram-js-egon-plugin`**: A plugin for `diagram-js` that provides the Egon.io-specific functionality.
+* **`apps/dst-plugin`**: The main VS Code extension. It contributes a custom editor for `.egn` files.
+* **`apps/dst-webview`**: A webview that renders the diagram-js canvas with the published [`egon-core`](https://github.com/Miragon/egon-core) package. It is a single-page application (SPA) built with Vite.
 * **`libs/vscode/data-transfer-objects`**: Contains data transfer objects (DTOs) used for communication between the plugin and the webview.
 * **`libs/vscode/domain-story`**: Contains the domain logic for domain stories.
 
@@ -32,7 +31,11 @@ To run the project in development mode, run the following command:
 yarn dev
 ```
 
-This will start the webpack and vite builds in watch mode. To start the extension, you need to press `F5` in VS Code.
+This starts the shared libraries, webview, and extension in watch mode. The apps
+resolve shared source through the repository's TypeScript path aliases, and the
+modeler core is installed from its pinned release archive, so no pre-existing
+local build artifacts are required. Press `F5` in VS Code to start the Extension
+Host.
 
 ### Test
 
@@ -54,11 +57,11 @@ yarn lint
 
 ### Tips & Tricks
 
-#### Debugging **diagram-js-plugin** with WebStorm
+#### Debugging the webview with WebStorm
 
 1. Run `yarn serve`
 2. Use the pre-configured debug configuration in [.run](../.run)
-3. Add a breakpoint in the code you want to debug (e.g. in [egon-modeler-webview](../apps/vscode/egon-modeler-webview/src) or [diagram-js-egon-plugin](../libs/diagram-js-egon-plugin/src))
+3. Add a breakpoint in [dst-webview](../apps/dst-webview/src). For modeler-core internals, use the upstream [`egon-core`](https://github.com/Miragon/egon-core) repository.
 4. Run the debug configuration
 
 ## Development Conventions

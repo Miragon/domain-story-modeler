@@ -1,6 +1,6 @@
 export default {
     displayName: "egon-modeler-webview",
-    preset: "../../../jest.preset.js",
+    preset: "../../jest.preset.js",
     globals: {},
     testEnvironment: "node",
     transform: {
@@ -12,5 +12,5 @@ export default {
         ],
     },
     moduleFileExtensions: ["ts", "js", "html"],
-    coverageDirectory: "../../../coverage/apps/vscode/egon-modeler-webview",
+    coverageDirectory: "../../coverage/apps/dst-webview",
 };

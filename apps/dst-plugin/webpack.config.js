@@ -3,7 +3,7 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const TsconfigPathsPlugin = require("tsconfig-paths-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 
-const DIST = path.resolve(__dirname, "../../../dist/apps/vscode/egon-io");
+const DIST = path.resolve(__dirname, "../../dist/apps/vscode/egon-io");
 
 module.exports = (env, argv) => {
     const isDevelopment = argv.mode === "development";
@@ -43,22 +43,6 @@ module.exports = (env, argv) => {
                     configFile: path.resolve(__dirname, "tsconfig.app.json"),
                 }),
             ],
-            alias: isDevelopment
-                ? {
-                      "@egon/diagram-js-egon-plugin": path.resolve(
-                          __dirname,
-                          "../../../dist/libs/diagram-js-egon-plugin",
-                      ),
-                      "@egon/vscode-domain-story": path.resolve(
-                          __dirname,
-                          "../../../dist/libs/vscode/domain-story",
-                      ),
-                      "@egon/vscode-data-transfer-objects": path.resolve(
-                          __dirname,
-                          "../../../dist/libs/vscode/data-transfer-objects",
-                      ),
-                  }
-                : {},
         },
         module: {
             rules: [
@@ -119,7 +103,7 @@ module.exports = (env, argv) => {
                     {
                         from: "egon-io-logo.png",
                         to: "assets/egon-io-logo.png",
-                        context: path.resolve(__dirname, "../../../images"),
+                        context: path.resolve(__dirname, "../../images"),
                     },
                     {
                         from: "style.css",
@@ -129,12 +113,12 @@ module.exports = (env, argv) => {
                     {
                         from: "LICENSE",
                         to: "[name][ext]",
-                        context: path.resolve(__dirname, "../../.."),
+                        context: path.resolve(__dirname, "../.."),
                     },
                     {
                         from: "README.md",
                         to: "[name][ext]",
-                        context: path.resolve(__dirname, "../../.."),
+                        context: path.resolve(__dirname, "../.."),
                     },
                 ],
             }),

@@ -1,5 +1,4 @@
-@import "diagram-js/assets/diagram-js.css";
-@import "../../../../dist/libs/diagram-js-egon-plugin/style.css";
+@import "egon-core/style.css";
 
 html, body {
     height: 100%;

@@ -1,5 +1,9 @@
 import { Icon, IconChange, IconName, IconType } from "../icons";
-import { DomainStoryDocument, IconMap } from "./DomainStoryDocument";
+import {
+    DomainStoryDocument,
+    IconMap,
+    isV4DomainStoryDocument,
+} from "./DomainStoryDocument";
 
 export class StoryIcons {
     constructor(private doc: DomainStoryDocument) {}
@@ -36,8 +40,11 @@ export class StoryIcons {
     }
 
     private getMap(type: IconType): IconMap {
+        const iconSet = isV4DomainStoryDocument(this.doc)
+            ? this.doc.iconSet
+            : this.doc.domain;
         return type === IconType.Actor
-            ? this.doc.domain.actors
-            : this.doc.domain.workObjects;
+            ? iconSet.actors
+            : iconSet.workObjects;
     }
 }
