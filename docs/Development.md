@@ -45,7 +45,8 @@ To run the tests, run the following command:
 yarn test
 ```
 
-This will run all the tests using Jest.
+This runs all four Vitest workspace projects with V8 coverage. Reports are
+written to the ignored root `coverage/` directory.
 
 ### Lint
 
@@ -68,7 +69,7 @@ yarn lint
 
 * **Commit Messages**: The project uses [semantic commit messages](https://gist.github.com/joshbuchea/6f47e86d2510bce28f8e7f42ae84c716).
 * **Coding Style**: The project uses ESLint and Prettier to enforce a consistent coding style.
-* **Testing**: The project uses Jest for unit and integration testing.
+* **Testing**: The project uses Vitest for unit and integration testing.
 
 ## The Visual Studio Code Extension (VSCE)
 

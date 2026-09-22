@@ -1,3 +1,3 @@
 # data-transfer-objects
 
-This library was generated with [Nx](https://nx.dev).
+This library contains the host/webview command DTOs used by the extension.

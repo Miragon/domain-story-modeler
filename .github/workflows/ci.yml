@@ -22,12 +22,12 @@ jobs:
       - uses: ./.github/actions/setup
       - run: yarn lint
 
-  test-jest:
+  test-vitest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-      - run: yarn test:jest
+      - run: yarn test
 
   build:
     runs-on: ubuntu-latest
@@ -62,7 +62,7 @@ jobs:
     if: always()
     needs:
       - lint
-      - test-jest
+      - test-vitest
       - build
       - dependency-pins
       - dependency-review
