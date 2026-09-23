@@ -31,19 +31,4 @@ export default [
             "@typescript-eslint/no-require-imports": "off",
         },
     },
-    {
-        files: ["**/__mocks__/**/*.js", "**/*.spec.ts", "**/*.test.ts"],
-        languageOptions: {
-            globals: {
-                jest: "readonly",
-                describe: "readonly",
-                it: "readonly",
-                expect: "readonly",
-                beforeEach: "readonly",
-                afterEach: "readonly",
-                beforeAll: "readonly",
-                afterAll: "readonly",
-            },
-        },
-    },
 ];

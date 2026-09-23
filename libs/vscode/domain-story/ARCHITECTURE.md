@@ -392,14 +392,16 @@ describe('EditorSession', () => {
 ### Integration Tests (Application Layer)
 
 ```typescript
+import { vi } from 'vitest';
+
 describe('DomainStoryEditorService', () => {
     let service: DomainStoryEditorService;
     let mockDocs: DocumentPort;
     let mockView: ViewPort;
 
     beforeEach(() => {
-        mockDocs = { read: jest.fn(), write: jest.fn() };
-        mockView = { display: jest.fn() };
+        mockDocs = { read: vi.fn(), write: vi.fn() };
+        mockView = { display: vi.fn() };
         service = new DomainStoryEditorService(mockDocs);
     });
 

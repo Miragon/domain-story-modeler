@@ -78,4 +78,4 @@ Echo prevention uses per-session guards to prevent infinite sync loops.
 
 ## Testing
 
-Tests use Jest. The `libs/vscode/domain-story` library has comprehensive unit tests demonstrating the testing patterns for each layer.
+Tests use Vitest. The `libs/vscode/domain-story` library has comprehensive unit tests demonstrating the testing patterns for each layer.

@@ -29,7 +29,7 @@ yarn npm audit --all --recursive --severity critical
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs for pull requests, pushes to `main`, merge queues, and manual dispatches. It checks linting, the Jest and Vitest suites, the complete build, exact dependency pins, changed dependencies on pull requests, and high/critical dependency advisories.
+`.github/workflows/ci.yml` runs for pull requests, pushes to `main`, merge queues, and manual dispatches. It checks linting, the Vitest suite, the complete build, exact dependency pins, changed dependencies on pull requests, and high/critical dependency advisories.
 
 Branch protection should require the aggregate `ci` job. It succeeds only when every required job succeeds; the dependency-review job may be skipped only outside pull requests. Also require `Validate Conventional Commit title`.
 

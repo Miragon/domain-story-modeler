@@ -33,4 +33,4 @@
 - **Imports**: Use relative imports for local files, absolute for dependencies
 - **Naming**: camelCase for variables/functions, PascalCase for interfaces/classes
 - **Formatting**: ESLint + Prettier configured
-- **Testing**: Jest for unit tests, no empty functions allowed (@typescript-eslint/no-empty-function: off)
+- **Testing**: Vitest for unit tests, no empty functions allowed (@typescript-eslint/no-empty-function: off)

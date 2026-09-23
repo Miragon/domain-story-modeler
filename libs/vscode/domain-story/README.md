@@ -202,19 +202,20 @@ This replaces the previous global `isChangeDocumentEventBlocked` flag.
 
 ## Testing
 
-The library has comprehensive test coverage across all layers (60 tests).
+The library has comprehensive test coverage across all layers (71 tests).
 
 **Run tests**:
 
 ```bash
-npx nx run domain-story:test
-npx nx run domain-story:test --coverage
+yarn vitest run --project domain-story
+yarn test
 ```
 
 **Test files**:
 
 - `src/domain/EditorSession.spec.ts` - Pure domain logic tests
 - `src/application/DomainStoryEditorService.spec.ts` - Orchestration & echo prevention
+- `src/application/icons/IconOperations.spec.ts` - Legacy and EGN v4 icon behavior
 - `src/infrastructure/VsCodeDocumentPort.spec.ts` - Document I/O tests
 - `src/infrastructure/VsCodeViewPort.spec.ts` - Webview communication tests
 
