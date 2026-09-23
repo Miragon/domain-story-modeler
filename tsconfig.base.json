@@ -15,8 +15,9 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@egon/data-transfer-objects": ["libs/vscode/data-transfer-objects/src/index.ts"],
-      "@egon/domain-story": ["libs/vscode/domain-story/src/index.ts"]
+      "@egon/modeler-core": ["libs/modeler-core/src/index.ts"],
+      "@egon/modeler-shared": ["libs/modeler-shared/src/index.ts"],
+      "@egon/modeler-types": ["libs/modeler-types/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

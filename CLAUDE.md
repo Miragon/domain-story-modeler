@@ -21,8 +21,11 @@ yarn build
 # Run all tests
 yarn test
 
+# Typecheck every workspace
+yarn typecheck
+
 # Run a single test file
-yarn test --testPathPattern="<pattern>"
+yarn vitest run path/to/file.spec.ts
 
 # Lint
 yarn lint
@@ -35,12 +38,13 @@ yarn serve
 
 ### Monorepo Structure (Yarn Workspaces)
 
-- **apps/dst-plugin** - VS Code extension entry point (webpack bundled)
-- **apps/dst-webview** - Webview UI that renders the diagram-js canvas with `egon-core` (Vite bundled)
-- **libs/vscode/domain-story** - Application layer with DDD architecture (domain, application, infrastructure)
-- **libs/vscode/data-transfer-objects** - Command DTOs for plugin ↔ webview communication
+- **apps/vscode-plugin** - VS Code extension entry point and VS Code adapters (Webpack)
+- **apps/egn-webview** - Browser UI using the published `egon-core` renderer (Vite)
+- **libs/modeler-core** - Host-independent domain, services, and host ports
+- **libs/modeler-shared** - Private host/webview command protocol
+- **libs/modeler-types** - Browser-safe EGN v4/legacy types and canonical defaults
 
-### DDD Architecture (libs/vscode/domain-story)
+### Modeler architecture
 
 Three-layer architecture with dependency injection via tsyringe:
 
@@ -51,14 +55,14 @@ Three-layer architecture with dependency injection via tsyringe:
    - `DomainStoryEditorService` - Session management and sync coordination
    - `DocumentPort`, `ViewPort` - Interfaces for infrastructure
 
-3. **Infrastructure Layer** - VS Code API implementations
-   - `VsCodeDocumentPort`, `VsCodeViewPort` - Adapt VS Code APIs to ports
+3. **Host Infrastructure** - `apps/vscode-plugin` implements the core ports
+   - `VsCodeDocumentPort`, `VsCodeViewPort` adapt VS Code APIs
 
 ### Modeler core
 
 The diagram-js modeler is supplied by the pinned
 [`egon-core`](https://github.com/Miragon/egon-core) release. Its public client
-and stylesheet are consumed by `apps/dst-webview`; core internals are maintained
+and stylesheet are consumed by `apps/egn-webview`; renderer internals are maintained
 in the upstream repository.
 
 ### Plugin ↔ Webview Communication
@@ -78,4 +82,4 @@ Echo prevention uses per-session guards to prevent infinite sync loops.
 
 ## Testing
 
-Tests use Vitest. The `libs/vscode/domain-story` library has comprehensive unit tests demonstrating the testing patterns for each layer.
+Tests use Vitest projects for all five workspaces. The core architecture suite enforces the absence of VS Code imports.
