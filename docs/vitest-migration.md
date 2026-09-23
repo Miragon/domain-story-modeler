@@ -3,6 +3,11 @@
 This document records the executable baseline and reuse inventory for issue #9,
 the testing foundation for epic #8.
 
+Issue #10 subsequently split the two libraries into the `modeler-core`,
+`modeler-shared`, and `modeler-types` projects and renamed both app directories.
+The baseline counts below remain the historical issue #9 result; current tests
+are registered across five workspace projects.
+
 ## Pre-migration baseline
 
 The baseline was captured at Domain Story Modeler commit `4f80a5e` before any

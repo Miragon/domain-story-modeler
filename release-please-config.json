@@ -21,7 +21,7 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "apps/dst-plugin/package.json",
+          "path": "apps/vscode-plugin/package.json",
           "jsonpath": "$.version"
         }
       ]

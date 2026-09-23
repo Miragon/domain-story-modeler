@@ -106,15 +106,24 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@egon/vscode-data-transfer-objects@workspace:libs/vscode/data-transfer-objects":
+"@egon/modeler-core@workspace:*, @egon/modeler-core@workspace:libs/modeler-core":
   version: 0.0.0-use.local
-  resolution: "@egon/vscode-data-transfer-objects@workspace:libs/vscode/data-transfer-objects"
+  resolution: "@egon/modeler-core@workspace:libs/modeler-core"
+  dependencies:
+    "@egon/modeler-types": "workspace:*"
+    tsyringe: "npm:4.8.0"
   languageName: unknown
   linkType: soft
 
-"@egon/vscode-domain-story@workspace:libs/vscode/domain-story":
+"@egon/modeler-shared@workspace:*, @egon/modeler-shared@workspace:libs/modeler-shared":
   version: 0.0.0-use.local
-  resolution: "@egon/vscode-domain-story@workspace:libs/vscode/domain-story"
+  resolution: "@egon/modeler-shared@workspace:libs/modeler-shared"
+  languageName: unknown
+  linkType: soft
+
+"@egon/modeler-types@workspace:*, @egon/modeler-types@workspace:libs/modeler-types":
+  version: 0.0.0-use.local
+  resolution: "@egon/modeler-types@workspace:libs/modeler-types"
   languageName: unknown
   linkType: soft
 
@@ -2700,18 +2709,26 @@ __metadata:
   languageName: node
   linkType: hard
 
-"egon-modeler-plugin@workspace:apps/dst-plugin":
+"egon-modeler-plugin@workspace:apps/vscode-plugin":
   version: 0.0.0-use.local
-  resolution: "egon-modeler-plugin@workspace:apps/dst-plugin"
+  resolution: "egon-modeler-plugin@workspace:apps/vscode-plugin"
+  dependencies:
+    "@egon/modeler-core": "workspace:*"
+    "@egon/modeler-shared": "workspace:*"
+    reflect-metadata: "npm:0.2.2"
+    tsyringe: "npm:4.8.0"
   languageName: unknown
   linkType: soft
 
-"egon-modeler-webview@workspace:apps/dst-webview":
+"egon-modeler-webview@workspace:apps/egn-webview":
   version: 0.0.0-use.local
-  resolution: "egon-modeler-webview@workspace:apps/dst-webview"
+  resolution: "egon-modeler-webview@workspace:apps/egn-webview"
   dependencies:
+    "@egon/modeler-shared": "workspace:*"
+    "@egon/modeler-types": "workspace:*"
     diagram-js-minimap: "npm:5.2.0"
     egon-core: "https://github.com/Miragon/egon-core/releases/download/v0.2.0/egon-core-0.2.0.tgz"
+    lodash: "npm:4.18.1"
   languageName: unknown
   linkType: soft
 
