@@ -44,11 +44,11 @@ interface SessionState {
  *         const sessionId = this.app.registerSession(documentId, document.getText(), view);
  *
  *         // Handle initialization
- *         panel.webview.onDidReceiveMessage(async (cmd) => {
- *             if (cmd.TYPE === 'InitializeWebview') {
+ *         panel.webview.onDidReceiveMessage(async (message) => {
+ *             if (message.type === 'InitializeWebviewCommand') {
  *                 await this.app.initialize(sessionId);
- *             } else if (cmd.TYPE === 'SyncDocument') {
- *                 await this.app.syncFromWebview(sessionId, cmd.text);
+ *             } else if (message.type === 'SyncDocumentCommand') {
+ *                 await this.app.syncFromWebview(sessionId, message.text);
  *             }
  *         });
  *
@@ -94,7 +94,11 @@ export class DomainStoryEditorService {
      * const sessionId = service.registerSession(documentId, document.getText(), view);
      * ```
      */
-    registerSession(documentId: string, initialText: string, view: ViewPort): string {
+    registerSession(
+        documentId: string,
+        initialText: string,
+        view: ViewPort,
+    ): string {
         let index = 1;
         let sessionId = documentId + `:${index}`;
         while (this.sessions.has(sessionId)) {
@@ -121,8 +125,8 @@ export class DomainStoryEditorService {
      *
      * @example
      * ```typescript
-     * webview.onDidReceiveMessage(async (cmd) => {
-     *     if (cmd.TYPE === 'InitializeWebview') {
+     * webview.onDidReceiveMessage(async (message) => {
+     *     if (message.type === 'InitializeWebviewCommand') {
      *         await service.initialize(sessionId);
      *     }
      * });
@@ -152,9 +156,9 @@ export class DomainStoryEditorService {
      *
      * @example
      * ```typescript
-     * webview.onDidReceiveMessage(async (cmd) => {
-     *     if (cmd.TYPE === 'SyncDocument') {
-     *         await service.syncFromWebview(cmd.sessionId, cmd.text);
+     * webview.onDidReceiveMessage(async (message) => {
+     *     if (message.type === 'SyncDocumentCommand') {
+     *         await service.syncFromWebview(sessionId, message.text);
      *     }
      * });
      * ```

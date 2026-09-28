@@ -3,6 +3,7 @@ export * from "./shared/domain/EditorSession";
 export * from "./shared/domain/DisposalScope";
 export * from "./shared/domain/hostPorts";
 export * from "./shared/service/DomainStoryEditorService";
+export * from "./shared/infrastructure/WebviewMessageRouter";
 export * from "./story/domain/StoryIcons";
 export * from "./story/infrastructure/StorySerialization";
 export * from "./icons/domain";

@@ -1,4 +1,10 @@
-import { CustomTextEditorProvider, TextDocument, Uri, WebviewPanel, workspace } from "vscode";
+import {
+    CustomTextEditorProvider,
+    TextDocument,
+    Uri,
+    WebviewPanel,
+    workspace,
+} from "vscode";
 import {
     DisposalScope,
     DomainStoryEditorService,
@@ -7,8 +13,12 @@ import {
     LoggerPort,
     NotifierPort,
     ViewPort,
+    WebviewMessageRouter,
 } from "@egon/modeler-core";
-import { Command, InitializeWebviewCommand, SyncDocumentCommand } from "@egon/modeler-shared";
+import {
+    parseWebviewToHostMessage,
+    WebviewToHostMessage,
+} from "@egon/modeler-shared";
 import { domainStoryEditorUi } from "./helper";
 
 type EditorPhase = "loading" | "flushing" | "ready" | "retired";
@@ -18,7 +28,7 @@ interface EditorLifetime {
     phase: EditorPhase;
     latestDocumentText: string;
     documentRevision: number;
-    pendingCommands: Command[];
+    pendingMessages: WebviewToHostMessage[];
     sessionId?: string;
 }
 
@@ -36,11 +46,43 @@ export interface WebviewControllerDependencies {
 /** Translates VS Code editor events into host-independent application calls. */
 export class WebviewController implements CustomTextEditorProvider {
     private readonly panels = new Map<WebviewPanel, EditorLifetime>();
+    private readonly messageRouter: WebviewMessageRouter<
+        WebviewToHostMessage,
+        string
+    >;
     private readonly renderUi: typeof domainStoryEditorUi;
     private disposed = false;
 
     constructor(private readonly dependencies: WebviewControllerDependencies) {
         this.renderUi = dependencies.renderUi ?? domainStoryEditorUi;
+        this.messageRouter = new WebviewMessageRouter<
+            WebviewToHostMessage,
+            string
+        >()
+            .on("InitializeWebviewCommand", async (_message, sessionId) => {
+                await this.dependencies.app.initialize(sessionId);
+            })
+            .on("SyncDocumentCommand", async (message, sessionId) => {
+                if (message.sessionId !== sessionId) {
+                    throw new Error(
+                        `Editor ID mismatch (${message.sessionId} != ${sessionId})`,
+                    );
+                }
+                await this.dependencies.app.syncFromWebview(
+                    sessionId,
+                    message.text,
+                );
+            })
+            .on("LogDebugCommand", (message) => {
+                this.dependencies.logger.debug(
+                    message.stack === undefined
+                        ? message.message
+                        : `${message.message}\n${message.stack}`,
+                );
+            })
+            .on("LogErrorCommand", (message) => {
+                this.dependencies.logger.error(message.message, message.stack);
+            });
     }
 
     async resolveCustomTextEditor(
@@ -53,12 +95,15 @@ export class WebviewController implements CustomTextEditorProvider {
 
         const lifetime: EditorLifetime = {
             scope: new DisposalScope((error) =>
-                this.dependencies.logger.error("Failed to dispose an editor resource", error),
+                this.dependencies.logger.error(
+                    "Failed to dispose an editor resource",
+                    error,
+                ),
             ),
             phase: "loading",
             latestDocumentText: document.getText(),
             documentRevision: 0,
-            pendingCommands: [],
+            pendingMessages: [],
         };
         this.panels.set(webviewPanel, lifetime);
 
@@ -66,8 +111,8 @@ export class WebviewController implements CustomTextEditorProvider {
             webviewPanel.webview.options = { enableScripts: true };
 
             lifetime.scope.add(
-                webviewPanel.webview.onDidReceiveMessage((command: Command) => {
-                    this.receiveCommand(lifetime, command);
+                webviewPanel.webview.onDidReceiveMessage((input: unknown) => {
+                    this.receiveMessage(lifetime, input);
                 }),
             );
 
@@ -75,7 +120,8 @@ export class WebviewController implements CustomTextEditorProvider {
                 workspace.onDidChangeTextDocument((event) => {
                     if (
                         event.contentChanges.length === 0 ||
-                        document.uri.path.split(".").pop() !== this.dependencies.extensionId ||
+                        document.uri.path.split(".").pop() !==
+                            this.dependencies.extensionId ||
                         document.uri.path !== event.document.uri.path
                     ) {
                         return;
@@ -85,7 +131,10 @@ export class WebviewController implements CustomTextEditorProvider {
                     lifetime.documentRevision++;
                     if (lifetime.phase === "ready" && lifetime.sessionId) {
                         void this.dependencies.app
-                            .onDocumentChanged(lifetime.sessionId, lifetime.latestDocumentText)
+                            .onDocumentChanged(
+                                lifetime.sessionId,
+                                lifetime.latestDocumentText,
+                            )
                             .catch((error) => {
                                 if (!lifetime.scope.isRetired)
                                     this.reportAsyncFailure(
@@ -98,7 +147,9 @@ export class WebviewController implements CustomTextEditorProvider {
             );
 
             lifetime.scope.add(
-                webviewPanel.onDidDispose(() => this.retire(webviewPanel, lifetime)),
+                webviewPanel.onDidDispose(() =>
+                    this.retire(webviewPanel, lifetime),
+                ),
             );
 
             webviewPanel.webview.html = this.renderUi(
@@ -120,9 +171,12 @@ export class WebviewController implements CustomTextEditorProvider {
             });
             if (lifetime.scope.isRetired) return;
 
-            await this.flushPendingCommands(lifetime);
+            await this.flushPendingMessages(lifetime);
         } catch (error) {
-            this.dependencies.logger.error("Failed to set up the domain story editor", error);
+            this.dependencies.logger.error(
+                "Failed to set up the domain story editor",
+                error,
+            );
             this.dependencies.notifier.error(
                 "The Domain Story Modeler could not be opened. See the Egon output for details.",
             );
@@ -144,23 +198,35 @@ export class WebviewController implements CustomTextEditorProvider {
     ): Promise<string | undefined> {
         let sourceRevision = lifetime.documentRevision;
         try {
-            const initialized = await this.dependencies.icons.initializeDocument(
-                document.uri.toString(),
-                () => {
-                    sourceRevision = lifetime.documentRevision;
-                    return lifetime.latestDocumentText;
-                },
-                lifetime.scope,
-            );
-            if (initialized !== undefined && lifetime.documentRevision === sourceRevision) {
+            const initialized =
+                await this.dependencies.icons.initializeDocument(
+                    document.uri.toString(),
+                    () => {
+                        sourceRevision = lifetime.documentRevision;
+                        return lifetime.latestDocumentText;
+                    },
+                    lifetime.scope,
+                );
+            if (
+                initialized !== undefined &&
+                lifetime.documentRevision === sourceRevision
+            ) {
                 lifetime.latestDocumentText = initialized;
             }
-            return initialized === undefined ? undefined : lifetime.latestDocumentText;
+            return initialized === undefined
+                ? undefined
+                : lifetime.latestDocumentText;
         } catch (error) {
             if (lifetime.scope.isRetired) return undefined;
 
-            this.dependencies.logger.error("Failed to initialize custom icons", error);
-            if (error instanceof IconInitializationError && error.stage === "write") {
+            this.dependencies.logger.error(
+                "Failed to initialize custom icons",
+                error,
+            );
+            if (
+                error instanceof IconInitializationError &&
+                error.stage === "write"
+            ) {
                 this.dependencies.notifier.error(
                     "Custom icons could not be saved. The editor opened with the current document icons.",
                 );
@@ -173,51 +239,68 @@ export class WebviewController implements CustomTextEditorProvider {
         }
     }
 
-    private receiveCommand(lifetime: EditorLifetime, command: Command): void {
+    private receiveMessage(lifetime: EditorLifetime, input: unknown): void {
         if (lifetime.scope.isRetired) return;
 
-        if (lifetime.phase !== "ready") {
-            lifetime.pendingCommands.push(command);
+        let message: WebviewToHostMessage;
+        try {
+            message = parseWebviewToHostMessage(input);
+        } catch (error) {
+            this.dependencies.logger.error(
+                "Rejected invalid webview message",
+                error,
+            );
             return;
         }
 
-        void this.dispatch(lifetime, command).catch((error) => {
+        if (lifetime.phase !== "ready") {
+            lifetime.pendingMessages.push(message);
+            return;
+        }
+
+        void this.dispatch(lifetime, message).catch((error) => {
             if (!lifetime.scope.isRetired) {
-                this.reportAsyncFailure("Failed to process a webview message", error);
+                this.reportAsyncFailure(
+                    "Failed to process a webview message",
+                    error,
+                );
             }
         });
     }
 
-    private async flushPendingCommands(lifetime: EditorLifetime): Promise<void> {
+    private async flushPendingMessages(
+        lifetime: EditorLifetime,
+    ): Promise<void> {
         lifetime.phase = "flushing";
-        while (!lifetime.scope.isRetired && lifetime.pendingCommands.length > 0) {
-            const command = lifetime.pendingCommands.shift();
-            if (!command) continue;
+        while (
+            !lifetime.scope.isRetired &&
+            lifetime.pendingMessages.length > 0
+        ) {
+            const message = lifetime.pendingMessages.shift();
+            if (!message) continue;
             try {
-                await this.dispatch(lifetime, command);
+                await this.dispatch(lifetime, message);
             } catch (error) {
                 if (!lifetime.scope.isRetired) {
-                    this.reportAsyncFailure("Failed to process a webview message", error);
+                    this.reportAsyncFailure(
+                        "Failed to process a webview message",
+                        error,
+                    );
                 }
             }
         }
         if (!lifetime.scope.isRetired) lifetime.phase = "ready";
     }
 
-    private async dispatch(lifetime: EditorLifetime, command: Command): Promise<void> {
+    private async dispatch(
+        lifetime: EditorLifetime,
+        message: WebviewToHostMessage,
+    ): Promise<void> {
         if (lifetime.scope.isRetired || !lifetime.sessionId) return;
 
-        this.dependencies.logger.debug(`Message received -> ${command.TYPE}`);
-        if (command.TYPE === InitializeWebviewCommand.name) {
-            await this.dependencies.app.initialize(lifetime.sessionId);
-        } else if (command.TYPE === SyncDocumentCommand.name) {
-            const sync = command as SyncDocumentCommand;
-            if (sync.sessionId !== lifetime.sessionId) {
-                throw new Error(`Editor ID mismatch (${sync.sessionId} != ${lifetime.sessionId})`);
-            }
-            await this.dependencies.app.syncFromWebview(sync.sessionId, sync.text);
-        }
-        this.dependencies.logger.debug(`Message processed -> ${command.TYPE}`);
+        this.dependencies.logger.debug(`Message received -> ${message.type}`);
+        await this.messageRouter.dispatch(message, lifetime.sessionId);
+        this.dependencies.logger.debug(`Message processed -> ${message.type}`);
     }
 
     private retire(panel: WebviewPanel, lifetime: EditorLifetime): void {
@@ -228,6 +311,8 @@ export class WebviewController implements CustomTextEditorProvider {
 
     private reportAsyncFailure(message: string, error: unknown): void {
         this.dependencies.logger.error(message, error);
-        this.dependencies.notifier.error(`${message}. See the Egon output for details.`);
+        this.dependencies.notifier.error(
+            `${message}. See the Egon output for details.`,
+        );
     }
 }

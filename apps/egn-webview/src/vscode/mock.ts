@@ -1,56 +1,48 @@
 import {
-    Command,
-    DisplayDomainStoryCommand,
-    InitializeWebviewCommand,
-    SyncDocumentCommand,
+    HostToWebviewMessage,
+    MockHostApi,
+    WebviewState,
+    WebviewToHostMessage,
 } from "@egon/modeler-shared";
-import { MissingStateError, VsCodeApi } from "./api";
 
-export class VsCodeMock<T, M extends Command> implements VsCodeApi<T, M> {
-    protected state: T | undefined;
-
-    getState(): T {
-        if (!this.state) throw new MissingStateError();
-        return this.state;
-    }
-
-    setState(state: T) {
-        this.state = state;
-    }
-
-    updateState(state: Partial<T>): void {
-        let oldState: T;
-        try {
-            state = this.getState();
-        } catch {
-            state = undefined;
-        }
-
-        this.setState({
-            ...oldState,
-            ...state,
-        });
-    }
-
-    postMessage(command: Command): void {
-        switch (true) {
-            case command.TYPE === InitializeWebviewCommand.name: {
+export class VsCodeMock extends MockHostApi<
+    WebviewState,
+    WebviewToHostMessage
+> {
+    postMessage(message: WebviewToHostMessage): void {
+        switch (message.type) {
+            case "InitializeWebviewCommand": {
                 // The initial message that gets sent if the webview is fully
                 // loaded.
-                dispatchEvent(new DisplayDomainStoryCommand("123456", mockStory));
+                dispatchEvent({
+                    type: "DisplayDomainStoryCommand",
+                    sessionId: "preview",
+                    text: mockStory,
+                });
                 break;
             }
-            case command.TYPE === SyncDocumentCommand.name: {
-                const c = command as SyncDocumentCommand;
-                dispatchEvent(new SyncDocumentCommand("123456", c.text));
+            case "SyncDocumentCommand": {
+                console.debug(
+                    "[DEBUG] Preview synchronized story",
+                    message.text,
+                );
                 break;
             }
-            default: {
-                throw new Error(`Unknown message type: ${command.TYPE}`);
+            case "LogDebugCommand": {
+                console.debug(message.message);
+                break;
+            }
+            case "LogErrorCommand": {
+                console.error(message.message, message.stack ?? "");
+                break;
+            }
+            case "DocumentFlushedCommand": {
+                console.debug("[DEBUG] Reserved flush response", message);
+                break;
             }
         }
 
-        function dispatchEvent(event: Command) {
+        function dispatchEvent(event: HostToWebviewMessage) {
             window.dispatchEvent(
                 new MessageEvent("message", {
                     data: event,

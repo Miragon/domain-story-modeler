@@ -1,66 +1,86 @@
-export interface Command {
-    /**
-     * After parsing the command, TypeScript can't identify the type of the object
-     * with **instanceof**.
-     * Therefore, we use this as a workaround.
-     */
-    TYPE: string;
+/** Stable wire identifiers. These values are protocol data, not constructor names. */
+export const messageTypes = {
+    initializeWebview: "InitializeWebviewCommand",
+    displayDomainStory: "DisplayDomainStoryCommand",
+    syncDocument: "SyncDocumentCommand",
+    logDebug: "LogDebugCommand",
+    logError: "LogErrorCommand",
+    flushDocument: "FlushDocumentQuery",
+    releaseDocumentFlush: "ReleaseDocumentFlushQuery",
+    documentFlushed: "DocumentFlushedCommand",
+} as const;
 
-    /**
-     * Unique identifier for the session in which the command is being executed.
-     */
-    sessionId: string;
+/** Webview -> host. The host derives the session from the receiving panel. */
+export interface InitializeWebviewMessage {
+    readonly type: "InitializeWebviewCommand";
 }
 
-/**
- * Command to initialize the webview.
- * Used when the webview sends an ` InitializeWebviewCommand ` to the extension.
- *
- * @param sessionId - Unique identifier for the session in which the command is being executed.
- */
-export class InitializeWebviewCommand implements Command {
-    readonly TYPE = InitializeWebviewCommand.name;
-
-    constructor(readonly sessionId: string) {}
+/** Host -> webview. */
+export interface DisplayDomainStoryMessage {
+    readonly type: "DisplayDomainStoryCommand";
+    readonly sessionId: string;
+    readonly text: string;
 }
 
-/**
- * Command to display domain story content in the webview.
- * Used when the extension sends a `DisplayDomainStoryCommand` to the webview.
- *
- * @param sessionId - Unique identifier for the session in which the command is being executed.
- * @param text - Content to display in the webview
- */
-export class DisplayDomainStoryCommand implements Command {
-    readonly TYPE = DisplayDomainStoryCommand.name;
-
-    constructor(
-        readonly sessionId: string,
-        readonly text: string,
-    ) {}
+/** Webview -> host. The session is checked against the receiving panel. */
+export interface SyncDocumentMessage {
+    readonly type: "SyncDocumentCommand";
+    readonly sessionId: string;
+    readonly text: string;
 }
 
-/**
- * Command to sync document content with the webview.
- * Used when the webview sends a `SyncDocumentCommand` to the extension.
- *
- * @param sessionId - Unique identifier for the session in which the command is being executed.
- * @param text - New content to sync to the webview
- */
-export class SyncDocumentCommand implements Command {
-    readonly TYPE = SyncDocumentCommand.name;
-
-    constructor(
-        readonly sessionId: string,
-        readonly text: string,
-    ) {}
+export interface DebugDiagnosticMessage {
+    readonly type: "LogDebugCommand";
+    readonly message: string;
+    readonly stack?: string;
 }
 
-export class GetDomainStoryAsSvgCommand implements Command {
-    readonly TYPE = GetDomainStoryAsSvgCommand.name;
-
-    constructor(
-        readonly sessionId: string,
-        readonly svg?: string,
-    ) {}
+export interface ErrorDiagnosticMessage {
+    readonly type: "LogErrorCommand";
+    readonly message: string;
+    /** Serialized because Error objects do not survive postMessage. */
+    readonly stack?: string;
 }
+
+/** Reserved for the save-time flush implementation in issue #15. */
+export interface FlushDocumentRequest {
+    readonly type: "FlushDocumentQuery";
+    readonly token: number;
+    readonly destructive: boolean;
+    readonly exportWhenClean: boolean;
+}
+
+/** Reserved for the save-time flush implementation in issue #15. */
+export interface ReleaseDocumentFlushRequest {
+    readonly type: "ReleaseDocumentFlushQuery";
+    readonly token: number;
+}
+
+export type DocumentFlushStatus =
+    | "clean"
+    | "flushed"
+    | "host-updated"
+    | "unavailable";
+
+/** Reserved webview -> host response for issue #15. */
+export interface DocumentFlushedResponse {
+    readonly type: "DocumentFlushedCommand";
+    readonly token: number;
+    readonly status: DocumentFlushStatus;
+    readonly content?: string;
+    readonly documentRevision?: number;
+}
+
+export type WebviewToHostMessage =
+    | InitializeWebviewMessage
+    | SyncDocumentMessage
+    | DebugDiagnosticMessage
+    | ErrorDiagnosticMessage
+    | DocumentFlushedResponse;
+
+export type HostToWebviewMessage =
+    | DisplayDomainStoryMessage
+    | FlushDocumentRequest
+    | ReleaseDocumentFlushRequest;
+
+export type ProtocolMessage = WebviewToHostMessage | HostToWebviewMessage;
