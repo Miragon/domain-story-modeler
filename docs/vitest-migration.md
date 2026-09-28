@@ -42,8 +42,9 @@ the tracked report that existed before this migration.
   typed mocks, hoist-safe factories, and constructible constructor doubles.
 - Replaced the implicit JavaScript VS Code mock with the explicitly aliased
   TypeScript module at `test/mocks/vscode.ts`.
-- Kept `reflect-metadata` in the domain-story setup and removed references to
-  nonexistent app setup files.
+- Kept the then-required domain-story setup while removing references to
+  nonexistent app setup files. Issue #11 later removed that setup together with
+  runtime dependency injection.
 - Unified `yarn test` on V8 coverage under the ignored root `coverage/`
   directory. Text, HTML, LCOV, Clover, and JSON reports are generated.
 - Removed tracked generated coverage and updated CI, TypeScript, lint, and
@@ -67,7 +68,7 @@ see its immutable
 |---|---|---|
 | Root `vitest.config.ts` | Root project list and V8 reporter set | Four current workspaces; one ignored root report; production-source inclusion; no BPMN projects or thresholds |
 | `apps/vscode-plugin/vitest.config.ts` | Named Node project, local discovery, source aliases | Current `@egon/*` packages and the shared VS Code TypeScript test double |
-| `libs/modeler-core/vitest.config.ts` | Per-library project boundary and setup pattern | Current domain-story layout and retained `reflect-metadata` setup |
+| `libs/modeler-core/vitest.config.ts` | Per-library project boundary and setup pattern | Current domain-story layout; the temporary metadata setup was removed by issue #11 |
 | Existing Domain Story Modeler suites | Explicit Vitest APIs, `vi` mocks, typed helpers, and hoist-safe constructor doubles | Preserved legacy/v4 fixtures, EGN v4 defaults, sessions, writes, rejection paths, and webview messages |
 
 No BPMN feature project or production module was copied. The referenced BPMN

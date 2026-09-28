@@ -1,4 +1,3 @@
-import { injectable } from "tsyringe";
 import { EditorSession } from "../domain/EditorSession";
 import { DocumentPort, ViewPort } from "../domain/hostPorts";
 
@@ -31,13 +30,7 @@ interface SessionState {
  *
  * @example
  * ```typescript
- * // In your DI container setup
- * container.register(DomainStoryEditorService, {
- *     useFactory: (c) => {
- *         const docs = c.resolve<DocumentPort>("DocumentPort");
- *         return new DomainStoryEditorService(docs);
- *     }
- * });
+ * const service = new DomainStoryEditorService(documentPort);
  *
  * // In your WebviewController
  * class WebviewController {
@@ -72,7 +65,6 @@ interface SessionState {
  * }
  * ```
  */
-@injectable()
 export class DomainStoryEditorService {
     private sessions = new Map<string, SessionState>();
 

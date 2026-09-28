@@ -49,9 +49,7 @@
   },
   "dependencies": {
     "@egon/modeler-core": "workspace:*",
-    "@egon/modeler-shared": "workspace:*",
-    "reflect-metadata": "0.2.2",
-    "tsyringe": "4.8.0"
+    "@egon/modeler-shared": "workspace:*"
   },
   "contributes": {
     "customEditors": [

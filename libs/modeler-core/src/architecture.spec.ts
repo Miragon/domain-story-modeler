@@ -24,4 +24,17 @@ describe("modeler-core architecture", () => {
 
         expect(offenders).toEqual([]);
     });
+
+    it("contains no host-adapter or runtime DI imports", () => {
+        const forbidden = [
+            /(?:from\s+|import\s*\()["'][^"']*apps\/vscode-plugin/,
+            /(?:from\s+|import\s*\()["'][^"']*VsCode/,
+            /(?:from\s+|import\s*\()["'](?:tsyringe|reflect-metadata)["']/,
+        ];
+        const offenders = productionTypeScriptFiles(sourceRoot).filter((path) =>
+            forbidden.some((pattern) => pattern.test(readFileSync(path, "utf8"))),
+        );
+
+        expect(offenders).toEqual([]);
+    });
 });
