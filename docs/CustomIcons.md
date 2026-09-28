@@ -16,8 +16,9 @@ the workspace hierarchy take part in that story's icon set.
 The file name without `.svg` becomes the icon name. Actor icons belong in
 `actors`; work-object icons belong in `work-objects`.
 
-Workspace icon creation, changes, and deletion are synchronized by the VS Code
-layer in `libs/vscode/domain-story`. It understands both supported file shapes:
+Workspace icon creation, changes, and deletion are coordinated by the services
+in `libs/modeler-core` and the adapters in `apps/vscode-plugin`. They understand
+both supported file shapes:
 
 - EGN v4 stores icons under `iconSet` and elements and metadata under
   `domainStory`.

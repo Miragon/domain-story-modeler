@@ -20,6 +20,7 @@ Yarn uses the `node-modules` linker. New dependency declarations default to exac
 Before opening a pull request, run:
 
 ```sh
+yarn typecheck
 yarn lint
 yarn test
 yarn build

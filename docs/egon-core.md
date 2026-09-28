@@ -10,4 +10,4 @@ instructions, see the [`egon-core` repository](https://github.com/Miragon/egon-c
 and its [client documentation](https://github.com/Miragon/egon-core/blob/v0.2.0/docs/Client.md).
 
 This repository pins the built v0.2.0 release archive explicitly in
-`apps/dst-webview/package.json`. Upgrade that URL and the lockfile together.
+`apps/egn-webview/package.json`. Upgrade that URL and the lockfile together.
