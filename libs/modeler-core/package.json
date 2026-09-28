@@ -12,6 +12,6 @@
   },
   "dependencies": {
     "@egon/modeler-types": "workspace:*",
-    "tsyringe": "4.8.0"
+    "tsyringe": "4.10.0"
   }
 }
