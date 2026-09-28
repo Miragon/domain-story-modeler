@@ -22,7 +22,7 @@ export default defineConfig({
             formats: ["es", "cjs"],
         },
         rollupOptions: {
-            external: ["@egon/modeler-types", "tsyringe"],
+            external: ["@egon/modeler-types"],
         },
     },
 });

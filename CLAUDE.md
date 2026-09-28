@@ -46,17 +46,19 @@ yarn serve
 
 ### Modeler architecture
 
-Three-layer architecture with dependency injection via tsyringe:
+Three-layer architecture with explicit construction at the extension entry point:
 
 1. **Domain Layer** - Pure business logic, no external dependencies
+
    - `EditorSession` - Aggregate root managing editor state and sync guards
 
 2. **Application Layer** - Use case orchestration with port interfaces
-   - `DomainStoryEditorService` - Session management and sync coordination
-   - `DocumentPort`, `ViewPort` - Interfaces for infrastructure
+
+   - `DomainStoryEditorService`, `IconService` - Session and icon orchestration
+   - Narrow host ports for editor, workspace, file, diagnostics, and notifications
 
 3. **Host Infrastructure** - `apps/vscode-plugin` implements the core ports
-   - `VsCodeDocumentPort`, `VsCodeViewPort` adapt VS Code APIs
+   - `VsCodeDocumentPort`, `VsCodeViewPort`, and `VsCodeIconHost` adapt VS Code APIs
 
 ### Modeler core
 
@@ -68,6 +70,7 @@ in the upstream repository.
 ### Plugin ↔ Webview Communication
 
 Commands flow bidirectionally via `postMessage`:
+
 - `InitializeWebviewCommand` - Webview requests initial content
 - `DisplayDomainStoryCommand` - Extension sends content to webview
 - `SyncDocumentCommand` - Webview sends changes to extension
@@ -76,7 +79,7 @@ Echo prevention uses per-session guards to prevent infinite sync loops.
 
 ## Key Patterns
 
-- **Dependency Injection**: tsyringe container configured in `main.config.ts`
+- **Composition**: `apps/vscode-plugin/src/main.ts` explicitly constructs shared adapters and services; registration functions own resources
 - **Custom Icons**: Users add SVGs to `.egon/icons/actors/` or `.egon/icons/work-objects/` in workspace
 - **Semantic Commits**: Follow conventional commits (feat, fix, docs, etc.)
 

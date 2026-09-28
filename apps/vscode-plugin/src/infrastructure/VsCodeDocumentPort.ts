@@ -8,18 +8,8 @@ import { DocumentPort } from "@egon/modeler-core";
  * It reads documents via `workspace.openTextDocument` and writes them using
  * `WorkspaceEdit` to ensure proper undo/redo support.
  *
- * @example
- * ```typescript
- * // Register in DI container
- * container.register<DocumentPort>("DocumentPort", {
- *     useClass: VsCodeDocumentPort,
- * });
- *
- * // Use directly
- * const port = new VsCodeDocumentPort();
- * const content = await port.read('/path/to/file.egn');
- * await port.write('/path/to/file.egn', 'updated content');
- * ```
+ * Constructed once in the extension composition root and shared by editor
+ * sessions.
  */
 export class VsCodeDocumentPort implements DocumentPort {
     /**

@@ -12,13 +12,18 @@ src/
 │   └── infrastructure/  # JSON parsing and serialization
 └── icons/
     ├── domain/          # Icon values and path parsing
-    └── service/         # Icon reconciliation use cases
+    └── service/         # Icon discovery, reconciliation, and propagation
 ```
 
-The core depends only on `@egon/modeler-types` and the existing composition
-metadata dependency. Its ports point outward; host adapters point inward. The
-architecture regression test scans production source and fails on any VS Code
-import.
+The core depends only on `@egon/modeler-types`. Its narrow ports point outward;
+VS Code adapters and the explicit activation composition root point inward. The
+architecture regression tests reject VS Code, host-adapter, and runtime
+dependency-injection imports.
+
+`DisposalScope` provides host-independent, idempotent lifetime ownership.
+`IconService` owns discovery, hierarchy selection, transformation, and
+filesystem persistence decisions; the extension translates resources and
+events without duplicating those policies.
 
 Current command names, session behavior, synchronization guards, and document
 identity semantics are intentionally preserved. Follow-up issues own their

@@ -88,10 +88,6 @@ module.exports = (env, argv) => {
                             }
                             out.name = pkg.publishName || pkg.name;
                             out.main = "main.js";
-                            out.dependencies = {
-                                "reflect-metadata": "0.2.2",
-                                tsyringe: "4.8.0",
-                            };
                             out.packageManager = "yarn@4.18.0";
                             return Buffer.from(JSON.stringify(out, null, 2));
                         },

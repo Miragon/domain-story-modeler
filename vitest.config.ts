@@ -22,7 +22,6 @@ export default defineConfig({
             ],
             exclude: [
                 "**/*.{spec,test}.ts",
-                "**/test-setup.ts",
                 "**/mocks/**",
                 "**/mock.ts",
                 "**/*.d.ts",

@@ -6,7 +6,6 @@ export default defineConfig({
         name: "modeler-core",
         environment: "node",
         include: ["src/**/*.{spec,test}.ts"],
-        setupFiles: ["src/test-setup.ts"],
         alias: {
             "@egon/modeler-core": resolve(__dirname, "src/index.ts"),
             "@egon/modeler-types": resolve(

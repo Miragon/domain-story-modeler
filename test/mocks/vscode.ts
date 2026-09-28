@@ -35,13 +35,36 @@ export const Position = vi.fn(function Position(
 });
 
 export const Uri = {
-    file: vi.fn((path: string) => ({ fsPath: path, path })),
+    file: vi.fn((path: string) => ({ fsPath: path, path, toString: () => path })),
+    parse: vi.fn((value: string) => ({ path: value, toString: () => value })),
+    joinPath: vi.fn((base: { path: string }, ...parts: string[]) => ({
+        path: [base.path.replace(/\/$/, ""), ...parts].join("/"),
+    })),
 };
+
+export const RelativePattern = vi.fn(function RelativePattern(
+    this: { base: unknown; pattern: string },
+    base: unknown,
+    pattern: string,
+) {
+    this.base = base;
+    this.pattern = pattern;
+});
+
+const disposable = () => ({ dispose: vi.fn() });
 
 export const workspace = {
     getConfiguration: vi.fn(),
+    getWorkspaceFolder: vi.fn(),
+    findFiles: vi.fn(),
     openTextDocument: vi.fn(),
     applyEdit: vi.fn(),
+    onDidChangeTextDocument: vi.fn(disposable),
+    createFileSystemWatcher: vi.fn(),
+    fs: {
+        readFile: vi.fn(),
+        writeFile: vi.fn(),
+    },
 };
 
 export const WorkspaceEdit = vi.fn(function WorkspaceEdit(this: {
@@ -54,6 +77,8 @@ export const window = {
     showErrorMessage: vi.fn(),
     showInformationMessage: vi.fn(),
     showWarningMessage: vi.fn(),
+    createOutputChannel: vi.fn(),
+    registerCustomEditorProvider: vi.fn(),
 };
 
 export const commands = {

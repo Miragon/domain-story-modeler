@@ -4,9 +4,7 @@
     "outDir": "../../dist/out-tsc",
     "types": [
       "node"
-    ],
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    ]
   },
   "exclude": [
     "vitest.config.ts",
