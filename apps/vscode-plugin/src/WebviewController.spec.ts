@@ -7,19 +7,18 @@ import {
     LoggerPort,
     NotifierPort,
 } from "@egon/modeler-core";
-import { InitializeWebviewCommand } from "@egon/modeler-shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebviewController } from "./WebviewController";
 
 interface FakePanel {
     panel: WebviewPanel;
-    messages: Array<(message: InitializeWebviewCommand) => void>;
+    messages: Array<(message: unknown) => void>;
     disposals: Array<() => void>;
     postMessage: ReturnType<typeof vi.fn>;
 }
 
 function fakePanel(onHtml?: () => void): FakePanel {
-    const messages: Array<(message: InitializeWebviewCommand) => void> = [];
+    const messages: Array<(message: unknown) => void> = [];
     const disposals: Array<() => void> = [];
     const postMessage = vi.fn().mockResolvedValue(true);
     let html = "";
@@ -53,7 +52,10 @@ function fakePanel(onHtml?: () => void): FakePanel {
     };
 }
 
-function document(path = "/workspace/story.egn", text = "embedded"): TextDocument {
+function document(
+    path = "/workspace/story.egn",
+    text = "embedded",
+): TextDocument {
     return {
         uri: { path, toString: () => path },
         getText: vi.fn(() => text),
@@ -67,6 +69,16 @@ function deferred<T>() {
     });
     return { promise, resolve };
 }
+
+const validStory = JSON.stringify({
+    iconSet: { name: "default", actors: {}, workObjects: {} },
+    domainStory: {
+        businessObjects: [],
+        title: "",
+        description: "",
+        version: "4.0.0",
+    },
+});
 
 describe("WebviewController", () => {
     const logger: LoggerPort = { debug: vi.fn(), error: vi.fn() };
@@ -95,7 +107,11 @@ describe("WebviewController", () => {
             notifier,
             createView: (panel) => ({
                 display: async (sessionId, text) => {
-                    await panel.webview.postMessage({ sessionId, text });
+                    await panel.webview.postMessage({
+                        type: "DisplayDomainStoryCommand",
+                        sessionId,
+                        text,
+                    });
                 },
             }),
             renderUi: () => "<html></html>",
@@ -120,8 +136,11 @@ describe("WebviewController", () => {
         const initialize = vi.spyOn(app, "initialize");
         const panel = fakePanel();
 
-        const resolving = controller().resolveCustomTextEditor(document(), panel.panel);
-        panel.messages[0](new InitializeWebviewCommand("early"));
+        const resolving = controller().resolveCustomTextEditor(
+            document(),
+            panel.panel,
+        );
+        panel.messages[0]({ type: "InitializeWebviewCommand" });
         expect(initialize).not.toHaveBeenCalled();
 
         loading.resolve("with-icons");
@@ -129,6 +148,7 @@ describe("WebviewController", () => {
 
         expect(initialize).toHaveBeenCalledWith("/workspace/story.egn:1");
         expect(panel.postMessage).toHaveBeenCalledWith({
+            type: "DisplayDomainStoryCommand",
             sessionId: "/workspace/story.egn:1",
             text: "with-icons",
         });
@@ -140,7 +160,10 @@ describe("WebviewController", () => {
         const register = vi.spyOn(app, "registerSession");
         const panel = fakePanel();
 
-        const resolving = controller().resolveCustomTextEditor(document(), panel.panel);
+        const resolving = controller().resolveCustomTextEditor(
+            document(),
+            panel.panel,
+        );
         panel.disposals[0]();
         loading.resolve("late");
         await resolving;
@@ -157,8 +180,12 @@ describe("WebviewController", () => {
         });
         const register = vi.spyOn(app, "registerSession");
         const panel = fakePanel();
-        const resolving = controller().resolveCustomTextEditor(document(), panel.panel);
-        const documentListener = vi.mocked(workspace.onDidChangeTextDocument).mock.calls[0][0];
+        const resolving = controller().resolveCustomTextEditor(
+            document(),
+            panel.panel,
+        );
+        const documentListener = vi.mocked(workspace.onDidChangeTextDocument)
+            .mock.calls[0][0];
 
         documentListener({
             contentChanges: [{}],
@@ -167,19 +194,31 @@ describe("WebviewController", () => {
         writing.resolve();
         await resolving;
 
-        expect(register).toHaveBeenCalledWith("/workspace/story.egn", "latest", expect.anything());
+        expect(register).toHaveBeenCalledWith(
+            "/workspace/story.egn",
+            "latest",
+            expect.anything(),
+        );
     });
 
     it("retires an earlier resolution without disposing its replacement", async () => {
         const first = deferred<string>();
-        initializeDocument.mockReturnValueOnce(first.promise).mockResolvedValueOnce("replacement");
+        initializeDocument
+            .mockReturnValueOnce(first.promise)
+            .mockResolvedValueOnce("replacement");
         const register = vi.spyOn(app, "registerSession");
         const dispose = vi.spyOn(app, "dispose");
         const panel = fakePanel();
         const instance = controller();
 
-        const oldResolution = instance.resolveCustomTextEditor(document(), panel.panel);
-        const replacement = instance.resolveCustomTextEditor(document(), panel.panel);
+        const oldResolution = instance.resolveCustomTextEditor(
+            document(),
+            panel.panel,
+        );
+        const replacement = instance.resolveCustomTextEditor(
+            document(),
+            panel.panel,
+        );
         await replacement;
         first.resolve("late-old-value");
         await oldResolution;
@@ -204,7 +243,7 @@ describe("WebviewController", () => {
 
         expect(dispose).toHaveBeenCalledWith("/workspace/story.egn:1");
         expect(dispose).not.toHaveBeenCalledWith("/workspace/story.egn:2");
-        second.messages[0](new InitializeWebviewCommand("ready"));
+        second.messages[0]({ type: "InitializeWebviewCommand" });
         await vi.waitFor(() => expect(second.postMessage).toHaveBeenCalled());
     });
 
@@ -214,10 +253,15 @@ describe("WebviewController", () => {
         const panel = fakePanel();
 
         await controller().resolveCustomTextEditor(document(), panel.panel);
-        expect(() => panel.messages[0](new InitializeWebviewCommand("ready"))).not.toThrow();
+        expect(() =>
+            panel.messages[0]({ type: "InitializeWebviewCommand" }),
+        ).not.toThrow();
 
         await vi.waitFor(() =>
-            expect(logger.error).toHaveBeenCalledWith("Failed to process a webview message", error),
+            expect(logger.error).toHaveBeenCalledWith(
+                "Failed to process a webview message",
+                error,
+            ),
         );
         expect(notifier.error).toHaveBeenCalledOnce();
     });
@@ -228,7 +272,10 @@ describe("WebviewController", () => {
         );
         const register = vi.spyOn(app, "registerSession");
 
-        await controller().resolveCustomTextEditor(document(), fakePanel().panel);
+        await controller().resolveCustomTextEditor(
+            document(),
+            fakePanel().panel,
+        );
 
         expect(register).toHaveBeenCalledWith(
             "/workspace/story.egn",
@@ -237,5 +284,132 @@ describe("WebviewController", () => {
         );
         expect(notifier.warning).toHaveBeenCalledOnce();
         expect(notifier.error).not.toHaveBeenCalled();
+    });
+
+    it("validates messages before queueing during initialization", async () => {
+        const loading = deferred<string>();
+        initializeDocument.mockReturnValueOnce(loading.promise);
+        const initialize = vi.spyOn(app, "initialize");
+        const panel = fakePanel();
+
+        const resolving = controller().resolveCustomTextEditor(
+            document(),
+            panel.panel,
+        );
+        panel.messages[0]({
+            type: "SyncDocumentCommand",
+            sessionId: "spoof",
+            text: "bad",
+        });
+        expect(logger.error).toHaveBeenCalledWith(
+            "Rejected invalid webview message",
+            expect.any(Error),
+        );
+
+        loading.resolve(validStory);
+        await resolving;
+        expect(initialize).not.toHaveBeenCalled();
+    });
+
+    it("uses the channel session after rejecting spoofed sessions across panels", async () => {
+        const sync = vi
+            .spyOn(app, "syncFromWebview")
+            .mockResolvedValue(undefined);
+        const first = fakePanel();
+        const second = fakePanel();
+        const instance = controller();
+
+        await Promise.all([
+            instance.resolveCustomTextEditor(
+                document("/one.egn", validStory),
+                first.panel,
+            ),
+            instance.resolveCustomTextEditor(
+                document("/two.egn", validStory),
+                second.panel,
+            ),
+        ]);
+        first.messages[0]({
+            type: "SyncDocumentCommand",
+            sessionId: "/two.egn:1",
+            text: validStory,
+        });
+        await vi.waitFor(() =>
+            expect(logger.error).toHaveBeenCalledWith(
+                "Failed to process a webview message",
+                expect.objectContaining({
+                    message: expect.stringContaining("Editor ID mismatch"),
+                }),
+            ),
+        );
+        expect(sync).not.toHaveBeenCalled();
+
+        first.messages[0]({
+            type: "SyncDocumentCommand",
+            sessionId: "/one.egn:1",
+            text: validStory,
+        });
+        await vi.waitFor(() =>
+            expect(sync).toHaveBeenCalledWith("/one.egn:1", validStory),
+        );
+    });
+
+    it("rejects a sibling panel session for the same document", async () => {
+        const sync = vi
+            .spyOn(app, "syncFromWebview")
+            .mockResolvedValue(undefined);
+        const first = fakePanel();
+        const second = fakePanel();
+        const instance = controller();
+
+        await Promise.all([
+            instance.resolveCustomTextEditor(
+                document("/same.egn", validStory),
+                first.panel,
+            ),
+            instance.resolveCustomTextEditor(
+                document("/same.egn", validStory),
+                second.panel,
+            ),
+        ]);
+        first.messages[0]({
+            type: "SyncDocumentCommand",
+            sessionId: "/same.egn:2",
+            text: validStory,
+        });
+        await vi.waitFor(() => expect(logger.error).toHaveBeenCalled());
+        expect(sync).not.toHaveBeenCalled();
+    });
+
+    it("maps typed diagnostics to logger capabilities", async () => {
+        const panel = fakePanel();
+        await controller().resolveCustomTextEditor(document(), panel.panel);
+
+        panel.messages[0]({ type: "LogDebugCommand", message: "from webview" });
+        panel.messages[0]({
+            type: "LogErrorCommand",
+            message: "failed in webview",
+            stack: "serialized stack",
+        });
+
+        await vi.waitFor(() =>
+            expect(logger.debug).toHaveBeenCalledWith("from webview"),
+        );
+        expect(logger.error).toHaveBeenCalledWith(
+            "failed in webview",
+            "serialized stack",
+        );
+    });
+
+    it("ignores messages delivered after a panel is retired", async () => {
+        const initialize = vi.spyOn(app, "initialize");
+        const panel = fakePanel();
+        await controller().resolveCustomTextEditor(document(), panel.panel);
+        panel.disposals[0]();
+
+        panel.messages[0]({ type: "InitializeWebviewCommand" });
+        await Promise.resolve();
+
+        expect(initialize).not.toHaveBeenCalled();
     });
 });

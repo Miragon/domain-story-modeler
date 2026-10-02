@@ -1,12 +1,12 @@
 import { WebviewPanel } from "vscode";
 import { ViewPort } from "@egon/modeler-core";
-import { DisplayDomainStoryCommand } from "@egon/modeler-shared";
+import { DisplayDomainStoryMessage } from "@egon/modeler-shared";
 
 /**
  * VS Code implementation of the ViewPort interface.
  *
  * This adapter sends content to the webview using VS Code's `postMessage` API.
- * It wraps the content in a `DisplayDomainStoryCommand` for the webview to process.
+ * It wraps the content in a typed display message for the webview to process.
  *
  * @example
  * ```typescript
@@ -31,8 +31,8 @@ export class VsCodeViewPort implements ViewPort {
     /**
      * Displays content in the webview by posting a message.
      *
-     * Creates a `DisplayDomainStoryCommand` and sends it to the webview via
-     * `postMessage`. The webview is expected to handle this command and update
+     * Creates a display message and sends it to the webview via `postMessage`.
+     * The webview is expected to handle this message and update
      * its display accordingly.
      *
      * @param sessionId - Unique identifier for the editor session
@@ -41,7 +41,11 @@ export class VsCodeViewPort implements ViewPort {
      * @throws Error if the webview is disposed or the message cannot be sent
      */
     async display(sessionId: string, text: string): Promise<void> {
-        const command = new DisplayDomainStoryCommand(sessionId, text);
-        await this.panel.webview.postMessage(command);
+        const message: DisplayDomainStoryMessage = {
+            type: "DisplayDomainStoryCommand",
+            sessionId,
+            text,
+        };
+        await this.panel.webview.postMessage(message);
     }
 }

@@ -2,22 +2,24 @@ import { debounce } from "lodash";
 import minimapModule from "diagram-js-minimap";
 import { DomainStoryDocument, EgonClient, ViewportData } from "egon-core";
 import {
-    Command,
-    DisplayDomainStoryCommand,
-    InitializeWebviewCommand,
-    SyncDocumentCommand,
+    defaultWebviewState,
+    ErrorDiagnosticMessage,
+    parseHostToWebviewMessage,
+    WebviewState,
 } from "@egon/modeler-shared";
 import { createEmptyStory } from "@egon/modeler-types";
-import { getVsCodeApi } from "./vscode/api";
+import { getHostApi } from "./vscode/api";
 
-const vscode = getVsCodeApi();
+const host = getHostApi();
+
+try {
+    host.getState();
+} catch {
+    host.setState(defaultWebviewState());
+}
 
 let egonClient: EgonClient | undefined;
-
-interface WebviewState {
-    editorId: string;
-    viewbox?: ViewportData;
-}
+let activeSessionId: string | undefined;
 
 class NoClientError extends Error {
     constructor() {
@@ -37,7 +39,13 @@ function importStory(story: string): void {
     getEgonClient().import(document);
 }
 
-const updateStory = debounce(importStory, 100);
+const updateStory = debounce((story: string) => {
+    try {
+        importStory(story);
+    } catch (error) {
+        sendErrorDiagnostic("Failed to display a domain story", error);
+    }
+}, 100);
 
 function exportStory(): string {
     const document: DomainStoryDocument = getEgonClient().export();
@@ -46,10 +54,20 @@ function exportStory(): string {
 
 function sendStoryChanges(): void {
     const egn = exportStory();
-    vscode.postMessage(new SyncDocumentCommand(vscode.getState().editorId, egn));
+    const sessionId = activeSessionId;
+    if (!sessionId) {
+        sendErrorDiagnostic(
+            "Cannot synchronize before a display session is established",
+        );
+        return;
+    }
+    host.postMessage({ type: "SyncDocumentCommand", sessionId, text: egn });
 }
 
-async function initializeDomainStoryModeler(story: string, state: WebviewState) {
+async function initializeDomainStoryModeler(
+    story: string,
+    state: WebviewState,
+) {
     const container = document.getElementById("egon-io-container");
     if (!container) {
         throw new Error("Container for Egon.io modeler not found!");
@@ -70,48 +88,58 @@ async function initializeDomainStoryModeler(story: string, state: WebviewState) 
     // EgonClient debounces story changes internally at 100 ms.
     egonClient.on("story.changed", sendStoryChanges);
     egonClient.on("viewport.changed", (viewport: ViewportData) =>
-        vscode.updateState({ viewbox: viewport }),
+        host.updateState({ viewbox: viewport }),
     );
 }
 
-async function onReceiveMessage(message: MessageEvent<Command>) {
-    const command = message.data;
+export async function onReceiveMessage(
+    event: MessageEvent<unknown>,
+): Promise<void> {
+    const message = parseHostToWebviewMessage(event.data);
+    if (message.type !== "DisplayDomainStoryCommand") return;
 
-    if (command.TYPE === DisplayDomainStoryCommand.name) {
-        const displayCommand = command as DisplayDomainStoryCommand;
-        try {
-            getEgonClient();
-            updateStory(displayCommand.text);
-        } catch (error: unknown) {
-            if (error instanceof NoClientError) {
-                try {
-                    vscode.updateState({ editorId: displayCommand.sessionId });
-                } catch {
-                    vscode.setState({
-                        editorId: displayCommand.sessionId,
-                        viewbox: undefined,
-                    });
-                }
+    if (
+        activeSessionId !== undefined &&
+        activeSessionId !== message.sessionId
+    ) {
+        throw new Error(
+            `Editor ID mismatch (${message.sessionId} != ${activeSessionId})`,
+        );
+    }
+    if (activeSessionId === undefined) {
+        activeSessionId = message.sessionId;
+        host.updateState({ editorId: message.sessionId });
+    }
 
-                await initializeDomainStoryModeler(
-                    displayCommand.text,
-                    vscode.getState(),
-                );
-            }
+    try {
+        getEgonClient();
+        updateStory(message.text);
+    } catch (error: unknown) {
+        if (error instanceof NoClientError) {
+            await initializeDomainStoryModeler(message.text, host.getState());
+        } else {
+            throw error;
         }
     }
 }
 
+function sendErrorDiagnostic(message: string, error?: unknown): void {
+    const detail = error instanceof Error ? error : undefined;
+    const diagnostic: ErrorDiagnosticMessage = {
+        type: "LogErrorCommand",
+        message: detail?.message ? `${message}: ${detail.message}` : message,
+        ...(detail?.stack === undefined ? {} : { stack: detail.stack }),
+    };
+    host.postMessage(diagnostic);
+}
+
 window.onload = function () {
-    window.addEventListener("message", onReceiveMessage);
+    window.addEventListener("message", (event: MessageEvent<unknown>) => {
+        void onReceiveMessage(event).catch((error) =>
+            sendErrorDiagnostic("Failed to process a host message", error),
+        );
+    });
 
-    let editorId: string;
-    try {
-        editorId = vscode.getState().editorId;
-    } catch {
-        editorId = "";
-    }
-
-    vscode.postMessage(new InitializeWebviewCommand(editorId));
+    host.postMessage({ type: "InitializeWebviewCommand" });
     console.debug("[DEBUG] Modeler is initialized...");
 };

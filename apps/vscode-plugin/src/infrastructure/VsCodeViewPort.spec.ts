@@ -1,26 +1,6 @@
-import { DisplayDomainStoryCommand } from "@egon/modeler-shared";
 import type { WebviewPanel } from "vscode";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VsCodeViewPort } from "./VsCodeViewPort";
-
-const { displayDomainStoryCommandMock } = vi.hoisted(() => ({
-    displayDomainStoryCommandMock: vi.fn(function DisplayDomainStoryCommandMock(
-        editorId: string,
-        text: string,
-    ) {
-        return {
-            TYPE: "DisplayDomainStoryCommand",
-            editorId,
-            text,
-        };
-    }),
-}));
-
-vi.mock("@egon/modeler-shared", () => ({
-    DisplayDomainStoryCommand: displayDomainStoryCommandMock,
-}));
-
-const commandMock = vi.mocked(DisplayDomainStoryCommand);
 
 describe("VsCodeViewPort", () => {
     let mockWebviewPanel: Partial<WebviewPanel>;
@@ -49,18 +29,12 @@ describe("VsCodeViewPort", () => {
             expect(postMessageMock).toHaveBeenCalled();
         });
 
-        it("should create DisplayDomainStoryCommand with correct parameters", async () => {
-            await port.display("/path/to/file.egn:1", "content");
-
-            expect(commandMock).toHaveBeenCalledWith("/path/to/file.egn:1", "content");
-        });
-
-        it("should post the command to webview", async () => {
+        it("should post the typed display message to webview", async () => {
             await port.display("/path/to/file.egn:1", "content");
 
             expect(postMessageMock).toHaveBeenCalledWith({
-                TYPE: "DisplayDomainStoryCommand",
-                editorId: "/path/to/file.egn:1",
+                type: "DisplayDomainStoryCommand",
+                sessionId: "/path/to/file.egn:1",
                 text: "content",
             });
         });
@@ -68,7 +42,11 @@ describe("VsCodeViewPort", () => {
         it("should handle empty content", async () => {
             await port.display("/path/to/file.egn:1", "");
 
-            expect(commandMock).toHaveBeenCalledWith("/path/to/file.egn:1", "");
+            expect(postMessageMock).toHaveBeenCalledWith({
+                type: "DisplayDomainStoryCommand",
+                sessionId: "/path/to/file.egn:1",
+                text: "",
+            });
         });
 
         it("should handle multiline content", async () => {
@@ -76,7 +54,11 @@ describe("VsCodeViewPort", () => {
 
             await port.display("/path/to/file.egn:1", multiline);
 
-            expect(commandMock).toHaveBeenCalledWith("/path/to/file.egn:1", multiline);
+            expect(postMessageMock).toHaveBeenCalledWith({
+                type: "DisplayDomainStoryCommand",
+                sessionId: "/path/to/file.egn:1",
+                text: multiline,
+            });
         });
 
         it("should handle special characters", async () => {
@@ -84,30 +66,44 @@ describe("VsCodeViewPort", () => {
 
             await port.display("/path/to/file.egn:1", special);
 
-            expect(commandMock).toHaveBeenCalledWith("/path/to/file.egn:1", special);
+            expect(postMessageMock).toHaveBeenCalledWith({
+                type: "DisplayDomainStoryCommand",
+                sessionId: "/path/to/file.egn:1",
+                text: special,
+            });
         });
 
         it("should handle different session IDs", async () => {
             await port.display("/path/to/file1.egn:1", "content1");
             await port.display("/path/to/file2.egn:1", "content2");
 
-            expect(commandMock).toHaveBeenCalledWith("/path/to/file1.egn:1", "content1");
-            expect(commandMock).toHaveBeenCalledWith("/path/to/file2.egn:1", "content2");
+            expect(postMessageMock).toHaveBeenNthCalledWith(1, {
+                type: "DisplayDomainStoryCommand",
+                sessionId: "/path/to/file1.egn:1",
+                text: "content1",
+            });
+            expect(postMessageMock).toHaveBeenNthCalledWith(2, {
+                type: "DisplayDomainStoryCommand",
+                sessionId: "/path/to/file2.egn:1",
+                text: "content2",
+            });
         });
 
         it("should resolve when postMessage succeeds", async () => {
             postMessageMock.mockResolvedValue(true);
 
-            await expect(port.display("/path/to/file.egn:1", "content")).resolves.not.toThrow();
+            await expect(
+                port.display("/path/to/file.egn:1", "content"),
+            ).resolves.not.toThrow();
         });
 
         it("should handle postMessage failure", async () => {
             const error = new Error("Webview disposed");
             postMessageMock.mockRejectedValue(error);
 
-            await expect(port.display("/path/to/file.egn:1", "content")).rejects.toThrow(
-                "Webview disposed",
-            );
+            await expect(
+                port.display("/path/to/file.egn:1", "content"),
+            ).rejects.toThrow("Webview disposed");
         });
     });
 

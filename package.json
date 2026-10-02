@@ -35,6 +35,7 @@
     "typecheck:webview": "tsc -p apps/egn-webview/tsconfig.app.json --noEmit",
     "typecheck:plugin": "tsc -p apps/vscode-plugin/tsconfig.app.json --noEmit",
     "test": "vitest run --coverage",
+    "test:artifacts": "node test/artifacts/protocol-artifacts.cjs",
     "lint": "eslint ."
   },
   "dependencies": {

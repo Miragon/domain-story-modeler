@@ -16,11 +16,6 @@ export default defineConfig({
 
     plugins: [tsconfigPaths()],
 
-    esbuild: {
-        minifyIdentifiers: false,
-        keepNames: true,
-    },
-
     build: {
         outDir: path.resolve(__dirname, "../../dist/apps/vscode-plugin/webview"),
         emptyOutDir: false,
