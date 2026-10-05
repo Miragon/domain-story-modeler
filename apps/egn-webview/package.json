@@ -11,7 +11,7 @@
   "dependencies": {
     "@egon/modeler-shared": "workspace:*",
     "@egon/modeler-types": "workspace:*",
-    "diagram-js-minimap": "5.2.0",
+    "diagram-js-minimap": "5.5.0",
     "egon-core": "https://github.com/Miragon/egon-core/releases/download/v0.2.0/egon-core-0.2.0.tgz",
     "lodash": "4.18.1"
   }
