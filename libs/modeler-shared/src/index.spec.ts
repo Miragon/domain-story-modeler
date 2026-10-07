@@ -27,6 +27,12 @@ const v4Story = JSON.stringify({
 });
 
 describe("directional protocol parsing", () => {
+    it("requires nonnegative integer revisions and request IDs", () => {
+        for (const value of [-1, 1.5, Infinity, "1", undefined]) {
+            expect(() => parseHostToWebviewMessage({ type: "DisplayDomainStoryCommand", sessionId: "s", text: "", documentRevision: value })).toThrow(ProtocolValidationError);
+            expect(() => parseWebviewToHostMessage({ type: "SyncDocumentCommand", sessionId: "s", text: v4Story, documentRevision: 0, requestId: value })).toThrow(ProtocolValidationError);
+        }
+    });
     it.each([
         [{ type: "InitializeWebviewCommand" }],
         [
@@ -34,6 +40,8 @@ describe("directional protocol parsing", () => {
                 type: "SyncDocumentCommand",
                 sessionId: "session",
                 text: legacyStory,
+                documentRevision: 0,
+                requestId: 1,
             },
         ],
         [{ type: "LogDebugCommand", message: "debug", stack: "stack" }],
@@ -44,7 +52,8 @@ describe("directional protocol parsing", () => {
     });
 
     it.each([
-        [{ type: "DisplayDomainStoryCommand", sessionId: "session", text: "" }],
+        [{ type: "DisplayDomainStoryCommand", sessionId: "session", text: "", documentRevision: 0 }],
+        [{ type: "SyncDocumentResultCommand", sessionId: "session", requestId: 1, documentRevision: 2, status: "applied" }],
         [
             {
                 type: "FlushDocumentQuery",

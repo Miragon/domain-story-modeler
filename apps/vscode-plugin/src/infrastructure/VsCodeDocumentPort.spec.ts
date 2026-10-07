@@ -1,135 +1,96 @@
 import type { TextDocument } from "vscode";
-import { Range, Uri, workspace, WorkspaceEdit } from "vscode";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FilePermission, Range, Uri, workspace, WorkspaceEdit } from "vscode";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VsCodeDocumentPort } from "./VsCodeDocumentPort";
 
-const openTextDocumentMock = vi.mocked(workspace.openTextDocument);
-const applyEditMock = vi.mocked(workspace.applyEdit);
-const workspaceEditMock = vi.mocked(WorkspaceEdit);
+const port = new VsCodeDocumentPort();
+const id = "vscode-remote://authority/C:/my%20file.egn?rev=2#frag";
+let text: string;
+let version: number;
+let edit: { replace: ReturnType<typeof vi.fn> };
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    text = "old\ncontent";
+    version = 4;
+    const doc = {
+        get version() { return version; },
+        getText: () => text,
+        positionAt: (offset: number) => {
+            const before = text.slice(0, offset).split("\n");
+            return { line: before.length - 1, character: before.at(-1)!.length };
+        },
+    } as TextDocument;
+    vi.mocked(workspace.openTextDocument).mockResolvedValue(doc);
+    vi.mocked(workspace.fs.isWritableFileSystem).mockReturnValue(true);
+    vi.mocked(workspace.fs.stat).mockResolvedValue({ permissions: 0 } as never);
+    edit = { replace: vi.fn() };
+    vi.mocked(WorkspaceEdit).mockImplementation(function () { return edit as unknown as WorkspaceEdit; });
+    vi.mocked(workspace.applyEdit).mockImplementation(async () => {
+        text = edit.replace.mock.calls[0][2];
+        version++;
+        return true;
+    });
+});
 
 describe("VsCodeDocumentPort", () => {
-    let port: VsCodeDocumentPort;
-    let mockTextDocument: Partial<TextDocument>;
-    let mockWorkspaceEdit: { replace: ReturnType<typeof vi.fn> };
-
-    beforeEach(() => {
-        port = new VsCodeDocumentPort();
-
-        mockTextDocument = {
-            getText: vi.fn().mockReturnValue("document content"),
-        };
-
-        mockWorkspaceEdit = {
-            replace: vi.fn(),
-        };
-
-        openTextDocumentMock.mockResolvedValue(mockTextDocument as TextDocument);
-        applyEditMock.mockResolvedValue(true);
-        workspaceEditMock.mockImplementation(function WorkspaceEditMock() {
-            return mockWorkspaceEdit as unknown as WorkspaceEdit;
-        });
+    it("reads using the complete URI and returns host version", async () => {
+        expect(await port.read(id)).toEqual({ text, version });
+        expect(Uri.parse).toHaveBeenCalledWith(id);
+        expect(workspace.openTextDocument).toHaveBeenCalledWith(expect.objectContaining({ path: id }));
     });
 
-    afterEach(() => {
-        vi.clearAllMocks();
+    it("replaces the full range, including content beyond 10,000 lines", async () => {
+        text = `${"line\n".repeat(10001)}end`;
+        expect((await port.write(id, "new", 4, () => true)).status).toBe("applied");
+        expect(Range).toHaveBeenCalledWith(expect.objectContaining({ line: 0, character: 0 }), expect.objectContaining({ line: 10001, character: 3 }));
+        expect(edit.replace).toHaveBeenCalledWith(expect.objectContaining({ path: id }), expect.anything(), "new");
     });
 
-    describe("read", () => {
-        it("should read content from document", async () => {
-            const content = await port.read("/path/to/file.txt");
-
-            expect(Uri.file).toHaveBeenCalledWith("/path/to/file.txt");
-            expect(workspace.openTextDocument).toHaveBeenCalled();
-            expect(content).toBe("document content");
-        });
-
-        it("should handle different file paths", async () => {
-            await port.read("/different/path.egn");
-
-            expect(Uri.file).toHaveBeenCalledWith("/different/path.egn");
-        });
-
-        it("should call getText on the document", async () => {
-            await port.read("/path/to/file.txt");
-
-            expect(mockTextDocument.getText).toHaveBeenCalled();
-        });
+    it("handles empty and CRLF-equivalent documents without unnecessary edit", async () => {
+        text = "";
+        expect((await port.write(id, "", 4, () => true)).status).toBe("unchanged");
+        text = "a\r\nb";
+        expect((await port.write(id, "a\nb", 4, () => true)).status).toBe("unchanged");
+        expect(workspace.applyEdit).not.toHaveBeenCalled();
     });
 
-    describe("write", () => {
-        it("should write content to document", async () => {
-            await port.write("/path/to/file.txt", "new content");
-
-            expect(Uri.file).toHaveBeenCalledWith("/path/to/file.txt");
-            expect(WorkspaceEdit).toHaveBeenCalled();
-            expect(mockWorkspaceEdit.replace).toHaveBeenCalled();
-            expect(workspace.applyEdit).toHaveBeenCalledWith(mockWorkspaceEdit);
-        });
-
-        it("preserves the known fixed 9,999-line replacement range until #13", async () => {
-            await port.write("/path/to/file.txt", "new content");
-
-            // Regression baseline only: #13 owns replacing this incomplete range.
-            expect(Range).toHaveBeenCalledWith(0, 0, 9999, 0);
-            expect(mockWorkspaceEdit.replace).toHaveBeenCalledWith(
-                expect.objectContaining({ path: "/path/to/file.txt" }),
-                expect.anything(),
-                "new content",
-            );
-        });
-
-        it("should handle empty content", async () => {
-            await port.write("/path/to/file.txt", "");
-
-            expect(mockWorkspaceEdit.replace).toHaveBeenCalledWith(
-                expect.anything(),
-                expect.anything(),
-                "",
-            );
-        });
-
-        it("should handle multiline content", async () => {
-            const multiline = "line1\nline2\nline3";
-
-            await port.write("/path/to/file.txt", multiline);
-
-            expect(mockWorkspaceEdit.replace).toHaveBeenCalledWith(
-                expect.anything(),
-                expect.anything(),
-                multiline,
-            );
-        });
-
-        it("should handle special characters", async () => {
-            const special = "特殊文字\t\n🎉";
-
-            await port.write("/path/to/file.txt", special);
-
-            expect(mockWorkspaceEdit.replace).toHaveBeenCalledWith(
-                expect.anything(),
-                expect.anything(),
-                special,
-            );
-        });
+    it("replaces an empty document from its start", async () => {
+        text = "";
+        expect((await port.write(id, "new", 4, () => true)).status).toBe("applied");
+        expect(Range).toHaveBeenCalledWith(expect.objectContaining({ line: 0, character: 0 }), expect.objectContaining({ line: 0, character: 0 }));
     });
 
-    describe("error handling", () => {
-        it("should propagate read errors", async () => {
-            const error = new Error("Cannot open document");
-            openTextDocumentMock.mockRejectedValue(error);
+    it("rejects stale version and retired session after async open", async () => {
+        expect((await port.write(id, "new", 3, () => true)).status).toBe("stale");
+        expect((await port.write(id, "new", 4, () => false)).status).toBe("stale");
+        expect(workspace.applyEdit).not.toHaveBeenCalled();
+    });
 
-            await expect(port.read("/path/to/file.txt")).rejects.toThrow(
-                "Cannot open document",
-            );
-        });
+    it("rechecks currency after asynchronous permission lookup", async () => {
+        let release!: (value: { permissions: number }) => void;
+        vi.mocked(workspace.fs.stat).mockReturnValueOnce(new Promise((resolve) => { release = resolve; }) as never);
+        let current = true;
+        const writing = port.write(id, "new", 4, () => current);
+        await vi.waitFor(() => expect(workspace.fs.stat).toHaveBeenCalled());
+        current = false;
+        release({ permissions: 0 });
+        expect((await writing).status).toBe("stale");
+        expect(workspace.applyEdit).not.toHaveBeenCalled();
+    });
 
-        it("should propagate write errors", async () => {
-            const error = new Error("Cannot apply edit");
-            applyEditMock.mockRejectedValue(error);
+    it("refuses unknown and read-only providers and files", async () => {
+        vi.mocked(workspace.fs.isWritableFileSystem).mockReturnValue(undefined);
+        await expect(port.write(id, "new", 4, () => true)).rejects.toThrow("not writable");
+        vi.mocked(workspace.fs.isWritableFileSystem).mockReturnValue(true);
+        vi.mocked(workspace.fs.stat).mockResolvedValue({ permissions: FilePermission.Readonly } as never);
+        await expect(port.write(id, "new", 4, () => true)).rejects.toThrow("read-only");
+    });
 
-            await expect(port.write("/path/to/file.txt", "content")).rejects.toThrow(
-                "Cannot apply edit",
-            );
-        });
+    it("treats rejected and incomplete applications as failures", async () => {
+        vi.mocked(workspace.applyEdit).mockResolvedValueOnce(false);
+        await expect(port.write(id, "new", 4, () => true)).rejects.toThrow("rejected");
+        vi.mocked(workspace.applyEdit).mockImplementationOnce(async () => true);
+        await expect(port.write(id, "new", 4, () => true)).rejects.toThrow("incomplete");
     });
 });

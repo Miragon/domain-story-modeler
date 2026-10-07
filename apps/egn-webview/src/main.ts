@@ -19,7 +19,15 @@ try {
 }
 
 let egonClient: EgonClient | undefined;
+let initializing: Promise<void> | undefined;
 let activeSessionId: string | undefined;
+let importedRevision = -1;
+let newestDisplayRevision = -1;
+let displaySequence = 0;
+let nextRequestId = 0;
+let outstanding: { requestId: number; text: string } | undefined;
+let pendingLocal: string | undefined;
+let importing = false;
 
 class NoClientError extends Error {
     constructor() {
@@ -39,13 +47,21 @@ function importStory(story: string): void {
     getEgonClient().import(document);
 }
 
-const updateStory = debounce((story: string) => {
+function applyDisplay(story: string, revision: number, sequence: number): void {
+    if (sequence !== displaySequence || revision < importedRevision) return;
     try {
-        importStory(story);
+        importing = true;
+        importStory(story === "" ? JSON.stringify(createEmptyStory()) : story);
+        importedRevision = revision;
+        pendingLocal = undefined;
     } catch (error) {
         sendErrorDiagnostic("Failed to display a domain story", error);
+    } finally {
+        importing = false;
     }
-}, 100);
+}
+
+const updateStory = debounce(applyDisplay, 100);
 
 function exportStory(): string {
     const document: DomainStoryDocument = getEgonClient().export();
@@ -53,6 +69,7 @@ function exportStory(): string {
 }
 
 function sendStoryChanges(): void {
+    if (importing || importedRevision < newestDisplayRevision) return;
     const egn = exportStory();
     const sessionId = activeSessionId;
     if (!sessionId) {
@@ -61,13 +78,21 @@ function sendStoryChanges(): void {
         );
         return;
     }
-    host.postMessage({ type: "SyncDocumentCommand", sessionId, text: egn });
+    if (outstanding) {
+        pendingLocal = egn;
+        return;
+    }
+    submitStory(egn);
 }
 
-async function initializeDomainStoryModeler(
-    story: string,
-    state: WebviewState,
-) {
+function submitStory(text: string): void {
+    if (!activeSessionId || importedRevision < newestDisplayRevision) return;
+    const requestId = ++nextRequestId;
+    outstanding = { requestId, text };
+    host.postMessage({ type: "SyncDocumentCommand", sessionId: activeSessionId, text, documentRevision: importedRevision, requestId });
+}
+
+async function initializeDomainStoryModeler(state: WebviewState): Promise<void> {
     const container = document.getElementById("egon-io-container");
     if (!container) {
         throw new Error("Container for Egon.io modeler not found!");
@@ -83,8 +108,6 @@ async function initializeDomainStoryModeler(
         [minimapModule],
     );
 
-    importStory(story === "" ? JSON.stringify(createEmptyStory()) : story);
-
     // EgonClient debounces story changes internally at 100 ms.
     egonClient.on("story.changed", sendStoryChanges);
     egonClient.on("viewport.changed", (viewport: ViewportData) =>
@@ -92,10 +115,37 @@ async function initializeDomainStoryModeler(
     );
 }
 
+async function ensureModeler(state: WebviewState): Promise<void> {
+    if (egonClient) return;
+    initializing ??= initializeDomainStoryModeler(state).finally(() => { initializing = undefined; });
+    await initializing;
+}
+
 export async function onReceiveMessage(
     event: MessageEvent<unknown>,
 ): Promise<void> {
     const message = parseHostToWebviewMessage(event.data);
+    if (message.type === "SyncDocumentResultCommand") {
+        if (message.sessionId !== activeSessionId || outstanding?.requestId !== message.requestId) return;
+        const acceptedText = outstanding.text;
+        outstanding = undefined;
+        if (message.status === "stale") {
+            pendingLocal = undefined;
+            return;
+        }
+        if (message.status === "failed") {
+            sendErrorDiagnostic("Failed to save domain story changes");
+            pendingLocal = undefined;
+            return;
+        }
+        importedRevision = Math.max(importedRevision, message.documentRevision);
+        if (pendingLocal !== undefined && importedRevision >= newestDisplayRevision) {
+            const pending = pendingLocal;
+            pendingLocal = undefined;
+            if (pending !== acceptedText) submitStory(pending);
+        }
+        return;
+    }
     if (message.type !== "DisplayDomainStoryCommand") return;
 
     if (
@@ -111,15 +161,14 @@ export async function onReceiveMessage(
         host.updateState({ editorId: message.sessionId });
     }
 
-    try {
-        getEgonClient();
-        updateStory(message.text);
-    } catch (error: unknown) {
-        if (error instanceof NoClientError) {
-            await initializeDomainStoryModeler(message.text, host.getState());
-        } else {
-            throw error;
-        }
+    if (message.documentRevision < newestDisplayRevision) return;
+    newestDisplayRevision = message.documentRevision;
+    const sequence = ++displaySequence;
+    if (!egonClient) {
+        await ensureModeler(host.getState());
+        applyDisplay(message.text, message.documentRevision, sequence);
+    } else {
+        updateStory(message.text, message.documentRevision, sequence);
     }
 }
 

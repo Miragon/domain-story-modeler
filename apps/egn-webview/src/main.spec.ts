@@ -79,6 +79,7 @@ describe("webview host boundary", () => {
                     type: "DisplayDomainStoryCommand",
                     sessionId: "session-1",
                     text: "not json",
+                    documentRevision: 0,
                 },
             }),
         );
@@ -95,6 +96,7 @@ describe("webview host boundary", () => {
                     type: "DisplayDomainStoryCommand",
                     sessionId: "session-1",
                     text: JSON.stringify(validStory),
+                    documentRevision: 0,
                 },
             }),
         );
@@ -108,7 +110,23 @@ describe("webview host boundary", () => {
             type: "SyncDocumentCommand",
             sessionId: "session-1",
             text: JSON.stringify(validStory),
+            documentRevision: 0,
+            requestId: 1,
         });
+
+        const pendingStory = { ...validStory, domainStory: { ...validStory.domainStory, title: "Pending" } };
+        mocks.client.export.mockReturnValue(pendingStory);
+        mocks.handlers.get("story.changed")?.();
+        expect(mocks.host.postMessage.mock.calls.filter(([message]) => message.type === "SyncDocumentCommand")).toHaveLength(1);
+        window.dispatchEvent(new MessageEvent("message", { data: { type: "SyncDocumentResultCommand", sessionId: "session-1", requestId: 999, documentRevision: 99, status: "applied" } }));
+        expect(mocks.host.postMessage.mock.calls.filter(([message]) => message.type === "SyncDocumentCommand")).toHaveLength(1);
+        window.dispatchEvent(new MessageEvent("message", { data: { type: "SyncDocumentResultCommand", sessionId: "session-1", requestId: 1, documentRevision: 1, status: "applied" } }));
+        await vi.waitFor(() => expect(mocks.host.postMessage).toHaveBeenCalledWith({ type: "SyncDocumentCommand", sessionId: "session-1", text: JSON.stringify(pendingStory), documentRevision: 1, requestId: 2 }));
+
+        window.dispatchEvent(new MessageEvent("message", { data: { type: "DisplayDomainStoryCommand", sessionId: "session-1", text: JSON.stringify(validStory), documentRevision: 2 } }));
+        mocks.handlers.get("story.changed")?.();
+        expect(mocks.host.postMessage.mock.calls.filter(([message]) => message.type === "SyncDocumentCommand")).toHaveLength(2);
+        window.dispatchEvent(new MessageEvent("message", { data: { type: "SyncDocumentResultCommand", sessionId: "session-1", requestId: 2, documentRevision: 2, status: "stale" } }));
 
         const importCount = mocks.client.import.mock.calls.length;
         window.dispatchEvent(
@@ -117,6 +135,7 @@ describe("webview host boundary", () => {
                     type: "DisplayDomainStoryCommand",
                     sessionId: "session-2",
                     text: JSON.stringify(validStory),
+                    documentRevision: 1,
                 },
             }),
         );

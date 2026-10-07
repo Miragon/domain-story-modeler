@@ -9,16 +9,18 @@ export interface MockRange {
 
 export const Range = vi.fn(function Range(
     this: MockRange,
-    startLine: number,
-    startChar: number,
-    endLine: number,
-    endChar: number,
+    startLine: number | MockPosition,
+    startChar: number | MockPosition,
+    endLine?: number,
+    endChar?: number,
 ) {
-    this.startLine = startLine;
-    this.startChar = startChar;
-    this.endLine = endLine;
-    this.endChar = endChar;
+    this.startLine = typeof startLine === "number" ? startLine : startLine.line;
+    this.startChar = typeof startLine === "number" ? startChar as number : startLine.character;
+    this.endLine = typeof startChar === "number" ? endLine as number : startChar.line;
+    this.endChar = typeof startChar === "number" ? endChar as number : startChar.character;
 });
+
+export const FilePermission = { Readonly: 1 };
 
 export interface MockPosition {
     line: number;
@@ -36,7 +38,7 @@ export const Position = vi.fn(function Position(
 
 export const Uri = {
     file: vi.fn((path: string) => ({ fsPath: path, path, toString: () => path })),
-    parse: vi.fn((value: string) => ({ path: value, toString: () => value })),
+    parse: vi.fn((value: string) => ({ scheme: value.split(":", 1)[0], path: value, toString: () => value })),
     joinPath: vi.fn((base: { path: string }, ...parts: string[]) => ({
         path: [base.path.replace(/\/$/, ""), ...parts].join("/"),
     })),
@@ -64,6 +66,8 @@ export const workspace = {
     fs: {
         readFile: vi.fn(),
         writeFile: vi.fn(),
+        stat: vi.fn(async () => ({ permissions: 0 })),
+        isWritableFileSystem: vi.fn(() => true),
     },
 };
 

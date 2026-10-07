@@ -1,46 +1,31 @@
-import { Range, Uri, workspace, WorkspaceEdit } from "vscode";
-import { DocumentPort } from "@egon/modeler-core";
+import { FilePermission, Position, Range, Uri, workspace, WorkspaceEdit } from "vscode";
+import { DocumentPort, DocumentSnapshot, DocumentWriteResult, sameContent } from "@egon/modeler-core";
 
-/**
- * VS Code implementation of the DocumentPort interface.
- *
- * This adapter provides document I/O operations using VS Code's workspace API.
- * It reads documents via `workspace.openTextDocument` and writes them using
- * `WorkspaceEdit` to ensure proper undo/redo support.
- *
- * Constructed once in the extension composition root and shared by editor
- * sessions.
- */
+/** Full-URI, version-checked VS Code text-document boundary. */
 export class VsCodeDocumentPort implements DocumentPort {
-    /**
-     * Reads the content of a VS Code document.
-     *
-     * @param documentId - File path of the document to read
-     * @returns Promise resolving to the document's text content
-     * @throws Error if the document cannot be opened
-     */
-    async read(documentId: string): Promise<string> {
-        const uri = Uri.file(documentId);
-        const doc = await workspace.openTextDocument(uri);
-        return doc.getText();
+    async read(documentId: string): Promise<DocumentSnapshot> {
+        const doc = await workspace.openTextDocument(Uri.parse(documentId));
+        return { text: doc.getText(), version: doc.version };
     }
 
-    /**
-     * Writes content to a VS Code document.
-     *
-     * This method replaces the entire document content (lines 0-9999) with the
-     * provided text. The operation is performed through a WorkspaceEdit to ensure
-     * proper integration with VS Code's undo/redo stack.
-     *
-     * @param documentId - File path of the document to write
-     * @param text - Content to write to the document
-     * @returns Promise that resolves when the write operation completes
-     * @throws Error if the edit cannot be applied
-     */
-    async write(documentId: string, text: string): Promise<void> {
-        const uri = Uri.file(documentId);
+    async write(documentId: string, text: string, expectedVersion: number, isCurrent: () => boolean): Promise<DocumentWriteResult> {
+        const uri = Uri.parse(documentId);
+        const doc = await workspace.openTextDocument(uri);
+        let snapshot = { text: doc.getText(), version: doc.version };
+        if (!isCurrent() || doc.version !== expectedVersion) return { status: "stale", snapshot };
+        if (sameContent(snapshot.text, text)) return { status: "unchanged", snapshot };
+        if (workspace.fs.isWritableFileSystem(uri.scheme) !== true) throw new Error(`Document is not writable: ${documentId}`);
+        const stat = await workspace.fs.stat(uri);
+        if ((stat.permissions ?? 0) & FilePermission.Readonly) throw new Error(`Document is read-only: ${documentId}`);
+        snapshot = { text: doc.getText(), version: doc.version };
+        if (!isCurrent() || doc.version !== expectedVersion) return { status: "stale", snapshot };
         const edit = new WorkspaceEdit();
-        edit.replace(uri, new Range(0, 0, 9999, 0), text);
-        await workspace.applyEdit(edit);
+        edit.replace(uri, new Range(new Position(0, 0), doc.positionAt(snapshot.text.length)), text);
+        if (!isCurrent() || doc.version !== expectedVersion) return { status: "stale", snapshot: { text: doc.getText(), version: doc.version } };
+        if (!await workspace.applyEdit(edit)) throw new Error(`VS Code rejected the document edit: ${documentId}`);
+        const actual = await workspace.openTextDocument(uri);
+        snapshot = { text: actual.getText(), version: actual.version };
+        if (!sameContent(snapshot.text, text)) throw new Error(`Document edit was incomplete: ${documentId}`);
+        return { status: "applied", snapshot };
     }
 }

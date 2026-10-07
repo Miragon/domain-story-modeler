@@ -17,7 +17,7 @@ explicit-composition work starts from `2b87472`.
 | `libs/modeler-core/src/shared/infrastructure/WebviewMessageRouter.ts` and `.spec.ts` | Registration-based routing, ordered sequential handlers, unknown-message no-op, and propagated handler failures | Ported to `modeler-core` with generic discriminated-message/context typing; the controller retains logging and validates `unknown` transport input before routing                 |
 | `libs/shared/src/lib/messages.ts`                                                    | Explicit `type` wire literals, diagnostics, and document-flush contracts                                        | Replaced EGN constructor-name commands with directional interfaces; retained only initialization, display, synchronization, debug/error diagnostics, and reserved flush contracts |
 | `libs/shared/src/lib/host.ts`                                                        | `HostApi`, production adapter, missing-state error, replacement, and patch semantics                            | Ported to `modeler-shared`; added one-time API acquisition, concrete EGN viewport state, and identical preview merging                                                            |
-| `apps/bpmn-webview/src/host.ts`                                                      | Environment-selected production/preview host bridge                                                             | Adapted in `apps/egn-webview/src/vscode/api.ts` and `mock.ts`; preview initialization emits display and synchronization is consumed without an echo                               |
+| `apps/bpmn-webview/src/host.ts`                                                      | Environment-selected production/preview host bridge                                                             | Adapted in `apps/egn-webview/src/vscode/api.ts` and `mock.ts`; preview initialization emits a revisioned display and synchronization receives a correlated result                               |
 
 ## EGN-specific orchestration
 
@@ -52,8 +52,14 @@ uses wire literals rather than preserved constructor/function names.
 ## Deliberate exclusions
 
 No BPMN/DMN models, participant framework, public API, feature-specific routing,
-deployment, or reference-repository source was copied. Persistence range changes,
-synchronization queues, revision tracking, URI redesign, and broader session
-guard changes remain deferred to issue #13. Operational document flushing
-remains deferred to issue #15. `egon-core` remains the independent webview
+deployment, or reference-repository source was copied. Broader bootstrap, viewport, teardown, and repair handling remain deferred to issue #14.
+Operational document flushing remains deferred to issue #15. `egon-core` remains the independent webview
 renderer.
+
+## Issue #13: document identity and synchronization
+
+The [pinned `EditorSessionStore.ts`](https://github.com/Miragon/bpmn-modeler/blob/08ea2c32ac05fdaeaab251229e56c5c0b2ae586b/libs/modeler-core/src/shared/infrastructure/EditorSessionStore.ts) supplied the URI-keyed identity, exact-session currency checks, recoverable queues, host revision checks, and EOL-aware comparison patterns. EGN adapts them for several panels per document: `DomainStoryEditorService` owns one record, revision, host version, and write queue for each complete URI, while each panel has a monotonic opaque session ID. Writes keep their exact session and expected revision; matching host echoes are counted and suppressed; unrelated changes advance the shared revision and publish to all active panels. Document records remain until pending writes settle after a panel closes.
+
+The EGN protocol adds required document revisions, per-session synchronization request IDs, and `applied`/`unchanged`/`stale`/`failed` results. The webview holds one outstanding write, queues its newest local snapshot, blocks export during a pending display, and reloads on conflicts. `VsCodeDocumentPort` uses full URIs, version and session checks, full-document ranges, EOL-aware verification, and writable-provider/permission checks. `VsCodeIconHost` applies the same writability rules to icon persistence.
+
+Regression coverage: `DomainStoryEditorService.spec.ts` (shared panels, echo guards, failure recovery, stale queues, close/reopen, duplicate events, distinct URIs, sibling failure), `VsCodeDocumentPort.spec.ts` (full range, read-only and writable provider behavior, stale version, rejected and incomplete edits), `WebviewController.spec.ts` (early tracking, shared events, spoofing, read-only initialization), `modeler-shared/src/index.spec.ts` (revision and request validation), `egn-webview/src/main.spec.ts` and `main.race.spec.ts` (acknowledgment correlation, pending edits, delayed creation and display), and `test/artifacts/protocol-artifacts.cjs` (built host and webview protocol).

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { VsCodeMock } from "./mock";
 
 describe("preview host", () => {
-    it("emits display for initialization and consumes synchronization without echo", () => {
+    it("emits display and correlated synchronization results", () => {
         const host = new VsCodeMock();
         host.setState({
             editorId: "",
@@ -27,8 +27,10 @@ describe("preview host", () => {
             type: "SyncDocumentCommand",
             sessionId: "preview",
             text: "story",
+            documentRevision: 0,
+            requestId: 1,
         });
-        expect(receive).not.toHaveBeenCalled();
+        expect(receive).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: "SyncDocumentResultCommand", requestId: 1, documentRevision: 1 }) }));
 
         host.updateState({ editorId: "preview" });
         expect(host.getState()).toEqual({

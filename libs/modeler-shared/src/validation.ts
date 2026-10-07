@@ -47,6 +47,12 @@ function numericField(value: Record<string, unknown>, key: string): number {
     return field;
 }
 
+function revisionField(value: Record<string, unknown>, key: string): number {
+    const field = numericField(value, key);
+    if (!Number.isSafeInteger(field) || field < 0) return invalid(`${key} must be a nonnegative integer`);
+    return field;
+}
+
 function optionalNumericField(
     value: Record<string, unknown>,
     key: string,
@@ -175,7 +181,7 @@ export function parseWebviewToHostMessage(
             const sessionId = stringField(message, "sessionId");
             const text = stringField(message, "text");
             validateDomainStoryText(text);
-            return { type, sessionId, text };
+            return { type, sessionId, text, documentRevision: revisionField(message, "documentRevision"), requestId: revisionField(message, "requestId") };
         }
         case "LogDebugCommand": {
             const stack = optionalStringField(message, "stack");
@@ -210,7 +216,12 @@ export function parseHostToWebviewMessage(
             const sessionId = stringField(message, "sessionId");
             const text = stringField(message, "text");
             validateDomainStoryText(text, true);
-            return { type, sessionId, text };
+            return { type, sessionId, text, documentRevision: revisionField(message, "documentRevision") };
+        }
+        case "SyncDocumentResultCommand": {
+            const status = stringField(message, "status");
+            if (!["applied", "unchanged", "stale", "failed"].includes(status)) return invalid(`unknown synchronization status: ${status}`);
+            return { type, sessionId: stringField(message, "sessionId"), requestId: revisionField(message, "requestId"), documentRevision: revisionField(message, "documentRevision"), status: status as "applied" | "unchanged" | "stale" | "failed" };
         }
         case "FlushDocumentQuery":
             return {
