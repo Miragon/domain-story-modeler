@@ -1,12 +1,22 @@
 /** Host capability for reading and replacing model documents. */
 export interface DocumentPort {
-    read(documentId: string): Promise<string>;
-    write(documentId: string, text: string): Promise<void>;
+    read(documentId: string): Promise<DocumentSnapshot>;
+    write(documentId: string, text: string, expectedVersion: number, isCurrent: () => boolean): Promise<DocumentWriteResult>;
 }
+
+export interface DocumentSnapshot {
+    readonly text: string;
+    readonly version: number;
+}
+
+export type DocumentWriteResult =
+    | { readonly status: "applied" | "unchanged"; readonly snapshot: DocumentSnapshot }
+    | { readonly status: "stale"; readonly snapshot: DocumentSnapshot };
 
 /** Host capability for displaying a model snapshot in an editor view. */
 export interface ViewPort {
-    display(sessionId: string, text: string): Promise<void>;
+    display(sessionId: string, text: string, documentRevision: number): Promise<void>;
+    syncResult(sessionId: string, requestId: number, documentRevision: number, status: "applied" | "unchanged" | "stale" | "failed"): Promise<void>;
 }
 
 /** A resource with an explicit, synchronous lifetime. */

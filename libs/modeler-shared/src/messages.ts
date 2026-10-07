@@ -3,6 +3,7 @@ export const messageTypes = {
     initializeWebview: "InitializeWebviewCommand",
     displayDomainStory: "DisplayDomainStoryCommand",
     syncDocument: "SyncDocumentCommand",
+    syncResult: "SyncDocumentResultCommand",
     logDebug: "LogDebugCommand",
     logError: "LogErrorCommand",
     flushDocument: "FlushDocumentQuery",
@@ -20,6 +21,7 @@ export interface DisplayDomainStoryMessage {
     readonly type: "DisplayDomainStoryCommand";
     readonly sessionId: string;
     readonly text: string;
+    readonly documentRevision: number;
 }
 
 /** Webview -> host. The session is checked against the receiving panel. */
@@ -27,6 +29,16 @@ export interface SyncDocumentMessage {
     readonly type: "SyncDocumentCommand";
     readonly sessionId: string;
     readonly text: string;
+    readonly documentRevision: number;
+    readonly requestId: number;
+}
+
+export interface SyncDocumentResultMessage {
+    readonly type: "SyncDocumentResultCommand";
+    readonly sessionId: string;
+    readonly requestId: number;
+    readonly documentRevision: number;
+    readonly status: "applied" | "unchanged" | "stale" | "failed";
 }
 
 export interface DebugDiagnosticMessage {
@@ -80,6 +92,7 @@ export type WebviewToHostMessage =
 
 export type HostToWebviewMessage =
     | DisplayDomainStoryMessage
+    | SyncDocumentResultMessage
     | FlushDocumentRequest
     | ReleaseDocumentFlushRequest;
 

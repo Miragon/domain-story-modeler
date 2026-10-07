@@ -20,6 +20,7 @@ const story = JSON.stringify({
         version: "4.0.0",
     },
 });
+const updatedStory = story.replace('"title":""', '"title":"Updated"');
 
 function disposable() {
     return { dispose() {} };
@@ -50,6 +51,8 @@ async function testExtensionArtifact() {
             fs: {
                 readFile: async () => new Uint8Array(),
                 writeFile: async () => {},
+                isWritableFileSystem: () => true,
+                stat: async () => ({ permissions: 0 }),
             },
         },
         window: {
@@ -65,6 +68,7 @@ async function testExtensionArtifact() {
                 toString: () => value,
             }),
             parse: (value) => ({
+                scheme: value.split(":")[0],
                 path: value,
                 fsPath: value,
                 toString: () => value,
@@ -81,6 +85,8 @@ async function testExtensionArtifact() {
             this.pattern = pattern;
         },
         Range: function Range() {},
+        Position: function Position() {},
+        FilePermission: { Readonly: 1 },
         WorkspaceEdit: function WorkspaceEdit() {
             this.replace = () => {};
         },
@@ -114,8 +120,11 @@ async function testExtensionArtifact() {
         },
         notifier: { warning() {}, error() {} },
         documentPort: {
-            read: async () => story,
-            write: async (documentId, text) => writes.push([documentId, text]),
+            read: async () => ({ text: story, version: 1 }),
+            write: async (documentId, text) => {
+                writes.push([documentId, text]);
+                return { status: "applied", snapshot: { text, version: 2 } };
+            },
         },
         iconHost: {
             workspaceFolders: { getWorkspaceFolder: () => undefined },
@@ -162,7 +171,8 @@ async function testExtensionArtifact() {
         },
     };
     const document = {
-        uri: { path: "/artifact.egn", toString: () => "/artifact.egn" },
+        uri: { scheme: "file", path: "/artifact.egn", toString: () => "file:///artifact.egn" },
+        version: 1,
         getText: () => story,
     };
     await controller.resolveCustomTextEditor(document, panel);
@@ -171,22 +181,27 @@ async function testExtensionArtifact() {
     await eventually(() => posted.length === 1, "typed display response");
     assert.deepEqual(posted[0], {
         type: "DisplayDomainStoryCommand",
-        sessionId: "/artifact.egn:1",
+        sessionId: "session-1",
         text: story,
+        documentRevision: 0,
     });
 
     messages[0]({
         type: "SyncDocumentCommand",
-        sessionId: "/artifact.egn:1",
-        text: story,
+        sessionId: "session-1",
+        text: updatedStory,
+        documentRevision: 0,
+        requestId: 1,
     });
     await eventually(() => writes.length === 1, "typed synchronization");
-    assert.deepEqual(writes[0], ["/artifact.egn", story]);
+    assert.deepEqual(writes[0], ["file:///artifact.egn", updatedStory]);
 
     messages[0]({
         type: "SyncDocumentCommand",
         sessionId: "/spoofed:1",
-        text: story,
+        text: updatedStory,
+        documentRevision: 1,
+        requestId: 2,
     });
     await eventually(
         () =>
@@ -200,8 +215,10 @@ async function testExtensionArtifact() {
 
     messages[0]({
         type: "SyncDocumentCommand",
-        sessionId: "/artifact.egn:1",
+        sessionId: "session-1",
         text: "not json",
+        documentRevision: 1,
+        requestId: 3,
     });
     assert.equal(writes.length, 1);
     assert.ok(
@@ -231,8 +248,10 @@ async function testExtensionArtifact() {
     disposals[0]();
     messages[0]({
         type: "SyncDocumentCommand",
-        sessionId: "/artifact.egn:1",
-        text: story,
+        sessionId: "session-1",
+        text: updatedStory,
+        documentRevision: 1,
+        requestId: 4,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(writes.length, 1);
@@ -279,6 +298,7 @@ async function testWebviewArtifact() {
                 type: "DisplayDomainStoryCommand",
                 sessionId: "artifact-session",
                 text: "not json",
+                documentRevision: 0,
             },
         }),
     );
@@ -294,6 +314,7 @@ async function testWebviewArtifact() {
                 type: "DisplayDomainStoryCommand",
                 sessionId: "artifact-session",
                 text: "",
+                documentRevision: 0,
             },
         }),
     );
@@ -308,6 +329,7 @@ async function testWebviewArtifact() {
                 type: "DisplayDomainStoryCommand",
                 sessionId: "other-session",
                 text: "",
+                documentRevision: 1,
             },
         }),
     );

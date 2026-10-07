@@ -1,6 +1,6 @@
 import { WebviewPanel } from "vscode";
 import { ViewPort } from "@egon/modeler-core";
-import { DisplayDomainStoryMessage } from "@egon/modeler-shared";
+import { DisplayDomainStoryMessage, SyncDocumentResultMessage } from "@egon/modeler-shared";
 
 /**
  * VS Code implementation of the ViewPort interface.
@@ -40,12 +40,18 @@ export class VsCodeViewPort implements ViewPort {
      * @returns Promise that resolves when the message is posted
      * @throws Error if the webview is disposed or the message cannot be sent
      */
-    async display(sessionId: string, text: string): Promise<void> {
+    async display(sessionId: string, text: string, documentRevision: number): Promise<void> {
         const message: DisplayDomainStoryMessage = {
             type: "DisplayDomainStoryCommand",
             sessionId,
             text,
+            documentRevision,
         };
-        await this.panel.webview.postMessage(message);
+        if (!await this.panel.webview.postMessage(message)) throw new Error("Webview did not accept the display message");
+    }
+
+    async syncResult(sessionId: string, requestId: number, documentRevision: number, status: SyncDocumentResultMessage["status"]): Promise<void> {
+        const message: SyncDocumentResultMessage = { type: "SyncDocumentResultCommand", sessionId, requestId, documentRevision, status };
+        if (!await this.panel.webview.postMessage(message)) throw new Error("Webview did not accept the synchronization result");
     }
 }

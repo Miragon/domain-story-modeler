@@ -1,6 +1,6 @@
 import { createEmptyStory, DomainStoryDocument } from "@egon/modeler-types";
 import { describe, expect, it, vi } from "vitest";
-import { IconHostPorts, IconInitializationError, IconService } from "./IconService";
+import { IconHostPorts, IconInitializationError, IconService, isIconVisibleToDocument } from "./IconService";
 
 interface FakeHost extends IconHostPorts {
     contents: Map<string, string>;
@@ -49,6 +49,9 @@ function story(text: string): DomainStoryDocument {
 }
 
 describe("IconService", () => {
+    it("compares Windows drive letters only when matching icon paths", () => {
+        expect(isIconVisibleToDocument("file:///C:/work/.egon/icons/actors/Person.svg", "file:///c:/work", "file:///c:/work/story")).toBe(true);
+    });
     it("loads visible icons in discovery order and writes an EGN v4 story", async () => {
         const host = fakeHost();
         host.discovered = [

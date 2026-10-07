@@ -1,4 +1,4 @@
-import { RelativePattern, Uri, workspace } from "vscode";
+import { FilePermission, RelativePattern, Uri, workspace } from "vscode";
 import {
     FileDiscoveryPort,
     FileReadPort,
@@ -38,10 +38,16 @@ export class VsCodeIconHost
     }
 
     async writeFile(resourceId: string, text: string): Promise<void> {
-        await workspace.fs.writeFile(toUri(resourceId), new TextEncoder().encode(text));
+        const uri = toUri(resourceId);
+        if (workspace.fs.isWritableFileSystem(uri.scheme) !== true) throw new Error(`Document is not writable: ${resourceId}`);
+        const stat = await workspace.fs.stat(uri);
+        if ((stat.permissions ?? 0) & FilePermission.Readonly) throw new Error(`Document is read-only: ${resourceId}`);
+        await workspace.fs.writeFile(uri, new TextEncoder().encode(text));
     }
 }
 
 function toUri(resourceId: string): Uri {
-    return resourceId.includes("://") ? Uri.parse(resourceId) : Uri.file(resourceId);
+    return /^[a-z][a-z\d+.-]*:/i.test(resourceId) && !/^[a-z]:[\\/]/i.test(resourceId)
+        ? Uri.parse(resourceId)
+        : Uri.file(resourceId);
 }

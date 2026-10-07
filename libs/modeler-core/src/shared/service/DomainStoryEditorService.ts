@@ -1,238 +1,190 @@
-import { EditorSession } from "../domain/EditorSession";
-import { DocumentPort, ViewPort } from "../domain/hostPorts";
+import { DocumentPort, DocumentSnapshot, ViewPort } from "../domain/hostPorts";
 
-/**
- * Internal state for a single editor session.
- * @internal
- */
-interface SessionState {
-    /** Guard counter to prevent echo loops (0 = idle, >0 = syncing) */
-    guard: number;
-    /** Domain aggregate managing the editor state */
-    session: EditorSession;
-    /** View port for displaying content to the webview */
-    view: ViewPort;
+interface SessionRecord {
+    readonly id: string;
+    readonly document: DocumentRecord;
+    readonly view: ViewPort;
+    retired: boolean;
 }
 
-/**
- * Application service that orchestrates domain story editor sessions.
- *
- * This service manages the lifecycle of editor sessions and coordinates
- * bidirectional synchronization between VS Code documents and webviews.
- * It implements echo prevention using per-session guards to avoid infinite
- * update loops.
- *
- * **Key Responsibilities:**
- * - Register and manage editor sessions
- * - Coordinate document ↔ webview synchronization
- * - Prevent echo loops between document and webview updates
- * - Maintain per-session state isolation
- *
- * @example
- * ```typescript
- * const service = new DomainStoryEditorService(documentPort);
- *
- * // In your WebviewController
- * class WebviewController {
- *     constructor(private app: DomainStoryEditorService) {}
- *
- *     async resolveCustomTextEditor(document: TextDocument, panel: WebviewPanel) {
- *         const documentId = document.uri.path;
- *         const view = new VsCodeViewPort(panel);
- *
- *         // Register the session
- *         const sessionId = this.app.registerSession(documentId, document.getText(), view);
- *
- *         // Handle initialization
- *         panel.webview.onDidReceiveMessage(async (message) => {
- *             if (message.type === 'InitializeWebviewCommand') {
- *                 await this.app.initialize(sessionId);
- *             } else if (message.type === 'SyncDocumentCommand') {
- *                 await this.app.syncFromWebview(sessionId, message.text);
- *             }
- *         });
- *
- *         // Handle document changes
- *         workspace.onDidChangeTextDocument(async (event) => {
- *             if (event.document.uri.path === document.uri.path) {
- *                 await this.app.onDocumentChanged(sessionId, event.document.getText());
- *             }
- *         });
- *
- *         // Cleanup
- *         panel.onDidDispose(() => this.app.dispose(sessionId));
- *     }
- * }
- * ```
- */
+interface DocumentRecord {
+    readonly id: string;
+    text: string;
+    version: number;
+    revision: number;
+    readonly sessions: Set<SessionRecord>;
+    readonly guards: Map<string, number>;
+    queue: Promise<void>;
+    pending: number;
+}
+
+export type SyncStatus = "applied" | "unchanged" | "stale" | "failed";
+
+/** Coordinates a complete document URI independently of its panels. */
 export class DomainStoryEditorService {
-    private sessions = new Map<string, SessionState>();
+    private readonly documents = new Map<string, DocumentRecord>();
+    private readonly sessions = new Map<string, SessionRecord>();
+    private nextSession = 0;
 
-    /**
-     * Creates a new domain story editor service.
-     *
-     * @param docs - Port for document I/O operations
-     */
-    constructor(private docs: DocumentPort) {}
+    constructor(private readonly docs: DocumentPort) {}
 
-    /**
-     * Registers a new editor session.
-     *
-     * This should be called when a new editor is opened. If a session with the
-     * same ID already exists, a new session is generated to avoid conflicts
-     * with existing sessions.
-     *
-     * @param documentId - Unique identifier for the document (typically file path)
-     * @param initialText - Initial content of the editor
-     * @param view - View port for displaying content to the webview
-     * @returns Unique identifier for the registered editor session
-     *
-     * @example
-     * ```typescript
-     * const documentId = document.uri.path;
-     * const view = new VsCodeViewPort(webviewPanel);
-     * const sessionId = service.registerSession(documentId, document.getText(), view);
-     * ```
-     */
-    registerSession(
-        documentId: string,
-        initialText: string,
-        view: ViewPort,
-    ): string {
-        let index = 1;
-        let sessionId = documentId + `:${index}`;
-        while (this.sessions.has(sessionId)) {
-            index++;
-            sessionId = documentId + `:${index}`;
+    registerSession(id: string, text: string, version: number, view: ViewPort): string {
+        let document = this.documents.get(id);
+        if (!document) {
+            document = { id, text, version, revision: 0, sessions: new Set(), guards: new Map(), queue: Promise.resolve(), pending: 0 };
+            this.documents.set(id, document);
+        } else if (version > document.version) {
+            this.onDocumentChanged(id, text, version);
         }
-
-        this.sessions.set(sessionId, {
-            guard: 0,
-            session: new EditorSession(documentId, initialText),
-            view,
-        });
-
+        const sessionId = `session-${++this.nextSession}`;
+        const session: SessionRecord = { id: sessionId, document, view, retired: false };
+        document.sessions.add(session);
+        this.sessions.set(sessionId, session);
         return sessionId;
     }
 
-    /**
-     * Initializes the webview with the current editor content.
-     *
-     * This is typically called when the webview sends an initialization message
-     * indicating it's ready to receive content.
-     *
-     * @param sessionId - Unique identifier for the editor session
-     *
-     * @example
-     * ```typescript
-     * webview.onDidReceiveMessage(async (message) => {
-     *     if (message.type === 'InitializeWebviewCommand') {
-     *         await service.initialize(sessionId);
-     *     }
-     * });
-     * ```
-     */
     async initialize(sessionId: string): Promise<void> {
-        const state = this.get(sessionId);
-        if (!state) return;
-        await state.view.display(sessionId, state.session.snapshot());
+        const session = this.sessions.get(sessionId);
+        if (session) await session.view.display(session.id, session.document.text, session.document.revision);
     }
 
-    /**
-     * Syncs content from the webview to the document.
-     *
-     * This is called when the webview sends updated content back to VS Code.
-     * The method uses a guard mechanism to prevent echo loops - while this sync
-     * is in progress, any document change events will be ignored.
-     *
-     * **Echo Prevention Flow:**
-     * 1. Guard counter increments
-     * 2. Document is updated (triggers onDidChangeTextDocument)
-     * 3. onDocumentChanged sees guard > 0 and skips update
-     * 4. Guard counter decrements
-     *
-     * @param sessionId - Unique identifier for the editor session
-     * @param text - Updated content from the webview
-     *
-     * @example
-     * ```typescript
-     * webview.onDidReceiveMessage(async (message) => {
-     *     if (message.type === 'SyncDocumentCommand') {
-     *         await service.syncFromWebview(sessionId, message.text);
-     *     }
-     * });
-     * ```
-     */
-    async syncFromWebview(sessionId: string, text: string): Promise<void> {
-        const state = this.get(sessionId);
-        if (!state) return;
-        state.guard++;
-        state.session.applyRemoteSync(text);
-        await this.docs.write(this.getDocumentIdFromSessionId(sessionId), text);
-        state.guard--;
-    }
-
-    /**
-     * Handles document content changes from the text editor.
-     *
-     * This is called when the user edits the text document directly in VS Code.
-     * If the guard is active (indicating a sync operation is in progress), this
-     * method does nothing to prevent echo loops.
-     *
-     * **Echo Prevention:**
-     * - If guard > 0: Change came from syncFromWebview, ignore it
-     * - If guard = 0: Change came from user, update the webview
-     *
-     * @param sessionId - Unique identifier for the editor session
-     * @param text - Updated content from the text editor
-     *
-     * @example
-     * ```typescript
-     * workspace.onDidChangeTextDocument(async (event) => {
-     *     if (event.document.uri.path === document.uri.path && event.contentChanges.length > 0) {
-     *         await service.onDocumentChanged(sessionId, event.document.getText());
-     *     }
-     * });
-     * ```
-     */
-    async onDocumentChanged(sessionId: string, text: string): Promise<void> {
-        const state = this.get(sessionId);
-        if (!state || state.guard > 0) {
+    /** Called once per host event, regardless of the number of panels. */
+    onDocumentChanged(id: string, text: string, version: number): void {
+        const doc = this.documents.get(id);
+        if (!doc || version <= doc.version) return;
+        doc.version = version;
+        if (this.consumeGuard(doc, text)) {
             return;
         }
-        state.session.applyLocalChange(text);
-        await state.view.display(sessionId, text);
+        if (sameContent(doc.text, text)) {
+            doc.text = text;
+            return;
+        }
+        doc.text = text;
+        doc.revision++;
+        this.publish(doc);
     }
 
-    /**
-     * Disposes of an editor session and cleans up resources.
-     *
-     * This should be called when the editor/webview is closed to prevent memory leaks.
-     *
-     * @param sessionId - Unique identifier for the editor session to dispose
-     *
-     * @example
-     * ```typescript
-     * webviewPanel.onDidDispose(() => {
-     *     service.dispose(sessionId);
-     * });
-     * ```
-     */
+    /** Records an icon initialization write when the host has not emitted a text-document event yet. */
+    onInitializedContent(id: string, text: string): void {
+        const doc = this.documents.get(id);
+        if (!doc || sameContent(doc.text, text)) return;
+        doc.text = text;
+        doc.revision++;
+        this.publish(doc);
+    }
+
+    async syncFromWebview(sessionId: string, text: string, expectedRevision: number, requestId: number): Promise<SyncStatus> {
+        const session = this.sessions.get(sessionId);
+        if (!session) return "stale";
+        const doc = session.document;
+        doc.pending++;
+        const run = async (): Promise<SyncStatus> => {
+            if (!this.current(session, expectedRevision)) return this.finish(session, requestId, "stale");
+            if (sameContent(doc.text, text)) return this.finish(session, requestId, "unchanged");
+            const expectedVersion = doc.version;
+            this.addGuard(doc, text);
+            try {
+                if (!this.current(session, expectedRevision)) return this.finish(session, requestId, "stale");
+                const result = await this.docs.write(doc.id, text, expectedVersion, () => this.current(session, expectedRevision));
+                if (!this.sessions.has(sessionId) || session.retired || doc.revision !== expectedRevision) {
+                    await this.reconcile(doc);
+                    return this.finish(session, requestId, "stale");
+                }
+                if (result.status === "stale") {
+                    this.acceptSnapshot(doc, result.snapshot);
+                    return this.finish(session, requestId, "stale");
+                }
+                doc.version = Math.max(doc.version, result.snapshot.version);
+                if (!sameContent(doc.text, result.snapshot.text)) {
+                    doc.text = result.snapshot.text;
+                    doc.revision++;
+                    this.publish(doc, session);
+                }
+                return this.finish(session, requestId, result.status);
+            } catch (error) {
+                await this.reconcile(doc).catch(() => undefined);
+                await this.finish(session, requestId, "failed");
+                throw error;
+            } finally {
+                this.releaseGuard(doc, text);
+            }
+        };
+        const result = doc.queue.then(run);
+        doc.queue = result.then(() => undefined, () => undefined).finally(() => {
+            doc.pending--;
+            this.collect(doc);
+        });
+        return result;
+    }
+
     dispose(sessionId: string): void {
+        const session = this.sessions.get(sessionId);
+        if (!session) return;
+        session.retired = true;
         this.sessions.delete(sessionId);
+        session.document.sessions.delete(session);
+        this.collect(session.document);
     }
 
-    /**
-     * Retrieves session state for a given id.
-     * @param sessionId - Editor session identifier
-     * @returns Session state if registered, undefined otherwise
-     * @internal
-     */
-    private get(sessionId: string): SessionState | undefined {
-        return this.sessions.get(sessionId);
+    private current(session: SessionRecord, revision: number): boolean {
+        return !session.retired && this.sessions.get(session.id) === session && session.document.revision === revision;
     }
 
-    private getDocumentIdFromSessionId(sessionId: string): string {
-        return sessionId.split(":")[0];
+    private async finish(session: SessionRecord, requestId: number, status: SyncStatus): Promise<SyncStatus> {
+        if (!session.retired) await session.view.syncResult(session.id, requestId, session.document.revision, status);
+        return status;
     }
+
+    private publish(doc: DocumentRecord, except?: SessionRecord): void {
+        for (const session of doc.sessions) {
+            if (session === except || session.retired) continue;
+            void session.view.display(session.id, doc.text, doc.revision).catch(() => undefined);
+        }
+    }
+
+    private acceptSnapshot(doc: DocumentRecord, snapshot: DocumentSnapshot): void {
+        if (snapshot.version < doc.version) return;
+        doc.version = snapshot.version;
+        if (sameContent(doc.text, snapshot.text)) return;
+        doc.text = snapshot.text;
+        doc.revision++;
+        this.publish(doc);
+    }
+
+    private async reconcile(doc: DocumentRecord): Promise<void> {
+        this.acceptSnapshot(doc, await this.docs.read(doc.id));
+    }
+
+    private addGuard(doc: DocumentRecord, text: string): void {
+        const key = normalize(text);
+        doc.guards.set(key, (doc.guards.get(key) ?? 0) + 1);
+    }
+
+    private consumeGuard(doc: DocumentRecord, text: string): boolean {
+        const key = normalize(text);
+        const count = doc.guards.get(key) ?? 0;
+        if (!count) return false;
+        this.releaseGuard(doc, text);
+        return true;
+    }
+
+    private releaseGuard(doc: DocumentRecord, text: string): void {
+        const key = normalize(text);
+        const count = doc.guards.get(key) ?? 0;
+        if (count <= 1) doc.guards.delete(key);
+        else doc.guards.set(key, count - 1);
+    }
+
+    private collect(doc: DocumentRecord): void {
+        if (!doc.sessions.size && !doc.pending && this.documents.get(doc.id) === doc) this.documents.delete(doc.id);
+    }
+}
+
+export function normalize(text: string): string {
+    return text.replace(/\r\n?/g, "\n");
+}
+
+export function sameContent(left: string, right: string): boolean {
+    return normalize(left) === normalize(right);
 }

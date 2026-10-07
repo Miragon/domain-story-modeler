@@ -18,6 +18,7 @@ export class VsCodeMock extends MockHostApi<
                     type: "DisplayDomainStoryCommand",
                     sessionId: "preview",
                     text: mockStory,
+                    documentRevision: 0,
                 });
                 break;
             }
@@ -26,6 +27,7 @@ export class VsCodeMock extends MockHostApi<
                     "[DEBUG] Preview synchronized story",
                     message.text,
                 );
+                dispatchEvent({ type: "SyncDocumentResultCommand", sessionId: message.sessionId, requestId: message.requestId, documentRevision: message.documentRevision + 1, status: "applied" });
                 break;
             }
             case "LogDebugCommand": {

@@ -1,352 +1,189 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { DomainStoryEditorService } from './DomainStoryEditorService';
-import { DocumentPort, ViewPort } from '../domain/hostPorts';
+import { describe, expect, it, vi } from "vitest";
+import { DocumentPort, ViewPort } from "../domain/hostPorts";
+import { DomainStoryEditorService } from "./DomainStoryEditorService";
 
-class MockDocumentPort implements DocumentPort {
-    private documents = new Map<string, string>();
-
-    async read(documentId: string): Promise<string> {
-        return this.documents.get(documentId) || '';
-    }
-
-    async write(documentId: string, text: string): Promise<void> {
-        this.documents.set(documentId, text);
-    }
-
-    getWrittenContent(documentId: string): string | undefined {
-        return this.documents.get(documentId);
-    }
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
 }
 
-class MockViewPort implements ViewPort {
-    private displayedContent = new Map<string, string[]>();
+function fixture() {
+    const texts = new Map<string, { text: string; version: number }>();
+    const displays: Array<[string, string, number]> = [];
+    const results: Array<[string, number, number, string]> = [];
+    const view: ViewPort = {
+        display: vi.fn(async (id, text, revision) => { displays.push([id, text, revision]); }),
+        syncResult: vi.fn(async (id, request, revision, status) => { results.push([id, request, revision, status]); }),
+    };
+    const docs: DocumentPort = {
+        read: vi.fn(async (id) => texts.get(id)!),
+        write: vi.fn(async (id, text, version, current) => {
+            const old = texts.get(id)!;
+            if (!current() || old.version !== version) return { status: "stale" as const, snapshot: old };
+            const snapshot = { text, version: version + 1 };
+            texts.set(id, snapshot);
+            return { status: "applied" as const, snapshot };
+        }),
+    };
+    const service = new DomainStoryEditorService(docs);
+    const open = (id = "file:///story.egn", text = "old") => {
+        if (!texts.has(id)) texts.set(id, { text, version: 1 });
+        return service.registerSession(id, text, 1, view);
+    };
+    return { texts, displays, results, view, docs, service, open };
+}
 
-    async display(sessionId: string, text: string): Promise<void> {
-        if (!this.displayedContent.has(sessionId)) {
-            this.displayedContent.set(sessionId, []);
+describe("DomainStoryEditorService", () => {
+    it("uses opaque, never-reused sessions and one document snapshot across panels", async () => {
+        const f = fixture();
+        const a = f.open("file:///a:1.egn");
+        const b = f.open("file:///a:1.egn", "wrong");
+        expect(a).not.toContain("file:");
+        expect(a).not.toBe(b);
+        await f.service.initialize(b);
+        expect(f.displays.at(-1)).toEqual([b, "old", 0]);
+        f.service.dispose(a);
+        const c = f.open("file:///a:1.egn");
+        expect(c).not.toBe(a);
+    });
+
+    it("advances once for a successful echo and updates siblings", async () => {
+        const f = fixture();
+        const a = f.open();
+        const b = f.open();
+        vi.mocked(f.docs.write).mockImplementationOnce(async (id, text, version) => {
+            const snapshot = { text: text.replace(/\n/g, "\r\n"), version: version + 1 };
+            f.texts.set(id, snapshot);
+            f.service.onDocumentChanged(id, snapshot.text, snapshot.version);
+            return { status: "applied", snapshot };
+        });
+        expect(await f.service.syncFromWebview(a, "new\ntext", 0, 7)).toBe("applied");
+        expect(f.results).toContainEqual([a, 7, 1, "applied"]);
+        expect(f.displays).toContainEqual([b, "new\r\ntext", 1]);
+        await f.service.initialize(a);
+        expect(f.displays.at(-1)?.[2]).toBe(1);
+    });
+
+    it("rejects conflicting panels and duplicate host notifications", async () => {
+        const f = fixture();
+        const a = f.open();
+        const b = f.open();
+        f.service.onDocumentChanged("file:///story.egn", "host", 2);
+        f.service.onDocumentChanged("file:///story.egn", "host", 2);
+        expect(await f.service.syncFromWebview(a, "mine", 0, 1)).toBe("stale");
+        expect(f.docs.write).not.toHaveBeenCalled();
+        expect(f.displays).toEqual([[a, "host", 1], [b, "host", 1]]);
+    });
+
+    it("keeps queues independent and recovers after failure", async () => {
+        const f = fixture();
+        const a = f.open("file:///a.egn");
+        const b = f.open("file:///b.egn");
+        const hold = deferred<void>();
+        vi.mocked(f.docs.write).mockImplementationOnce(async () => { await hold.promise; throw new Error("disk"); });
+        const failed = f.service.syncFromWebview(a, "first", 0, 1);
+        await Promise.resolve();
+        expect(await f.service.syncFromWebview(b, "other", 0, 1)).toBe("applied");
+        hold.resolve();
+        await expect(failed).rejects.toThrow("disk");
+        expect(await f.service.syncFromWebview(a, "second", 0, 2)).toBe("applied");
+        expect(f.results).toContainEqual([a, 1, 0, "failed"]);
+    });
+
+    it("discards queued work from a retired session but retains its document queue for reopen", async () => {
+        const f = fixture();
+        const a = f.open();
+        const hold = deferred<void>();
+        vi.mocked(f.docs.write).mockImplementationOnce(async (id, text, version) => {
+            await hold.promise;
+            const snapshot = { text, version: version + 1 };
+            f.texts.set(id, snapshot);
+            return { status: "applied", snapshot };
+        });
+        const first = f.service.syncFromWebview(a, "old write", 0, 1);
+        await Promise.resolve();
+        const queued = f.service.syncFromWebview(a, "queued", 0, 2);
+        f.service.dispose(a);
+        const b = f.open();
+        hold.resolve();
+        expect(await first).toBe("stale");
+        expect(await queued).toBe("stale");
+        await f.service.initialize(b);
+        expect(f.displays.at(-1)).toEqual([b, "old write", 1]);
+    });
+
+    it("does not revise unchanged content and does not confuse complete URIs", async () => {
+        const f = fixture();
+        const a = f.open("file://one/path.egn?q=1");
+        const b = f.open("file://two/path.egn?q=1");
+        expect(await f.service.syncFromWebview(a, "old", 0, 1)).toBe("unchanged");
+        f.service.onDocumentChanged("file://one/path.egn?q=1", "change", 2);
+        await f.service.initialize(b);
+        expect(f.displays.at(-1)).toEqual([b, "old", 0]);
+    });
+
+    it("advances an unrelated host edit during a write and rejects that write", async () => {
+        const f = fixture();
+        const a = f.open();
+        const hold = deferred<void>();
+        vi.mocked(f.docs.write).mockImplementationOnce(async (id, text, version) => {
+            f.service.onDocumentChanged(id, "host edit", version + 1);
+            await hold.promise;
+            return { status: "stale", snapshot: { text: "host edit", version: version + 1 } };
+        });
+        const writing = f.service.syncFromWebview(a, "mine", 0, 1);
+        await vi.waitFor(() => expect(f.displays).toContainEqual([a, "host edit", 1]));
+        hold.resolve();
+        expect(await writing).toBe("stale");
+        expect(f.results).toContainEqual([a, 1, 1, "stale"]);
+    });
+
+    it("drops a queued snapshot after an earlier write advances the revision", async () => {
+        const f = fixture();
+        const a = f.open();
+        const first = f.service.syncFromWebview(a, "first", 0, 1);
+        const second = f.service.syncFromWebview(a, "second", 0, 2);
+        expect(await first).toBe("applied");
+        expect(await second).toBe("stale");
+        expect(f.docs.write).toHaveBeenCalledTimes(1);
+    });
+
+    it("continues publishing to healthy siblings when one display fails", async () => {
+        const f = fixture();
+        const a = f.open();
+        const b = f.open();
+        const c = f.open();
+        vi.mocked(f.view.display).mockImplementationOnce(async () => { throw new Error("hidden"); });
+        f.service.onDocumentChanged("file:///story.egn", "host", 2);
+        await f.service.initialize(c);
+        expect(f.displays).toContainEqual([b, "host", 1]);
+        expect(f.displays).toContainEqual([c, "host", 1]);
+        expect(a).not.toBe(b);
+    });
+
+    it("records initialization content once without inventing a host version", async () => {
+        const f = fixture();
+        const a = f.open();
+        const b = f.open();
+        f.service.onInitializedContent("file:///story.egn", "icons");
+        f.service.onInitializedContent("file:///story.egn", "icons");
+        await f.service.initialize(a);
+        expect(f.displays.at(-1)).toEqual([a, "icons", 1]);
+        expect(f.displays.filter(([id]) => id === b)).toHaveLength(1);
+    });
+
+    it("publishes text-editor edits and undo/redo snapshots to both panels", async () => {
+        const f = fixture();
+        const a = f.open();
+        const b = f.open();
+        f.service.onDocumentChanged("file:///story.egn", "edited", 2);
+        f.service.onDocumentChanged("file:///story.egn", "old", 3);
+        f.service.onDocumentChanged("file:///story.egn", "edited", 4);
+        for (const id of [a, b]) {
+            expect(f.displays.filter(([session]) => session === id)).toEqual([
+                [id, "edited", 1], [id, "old", 2], [id, "edited", 3],
+            ]);
         }
-        this.displayedContent.get(sessionId)!.push(text);
-    }
-
-    getDisplayCalls(sessionId: string): string[] {
-        return this.displayedContent.get(sessionId) || [];
-    }
-
-    getLastDisplayedContent(sessionId: string): string | undefined {
-        const calls = this.displayedContent.get(sessionId);
-        return calls && calls.length > 0 ? calls[calls.length - 1] : undefined;
-    }
-
-    resetCalls(sessionId: string): void {
-        this.displayedContent.delete(sessionId);
-    }
-}
-
-describe('DomainStoryEditorService', () => {
-    let service: DomainStoryEditorService;
-    let mockDocs: MockDocumentPort;
-    let mockView: MockViewPort;
-    const documentId = '/path/to/file.egn';
-
-    beforeEach(() => {
-        mockDocs = new MockDocumentPort();
-        mockView = new MockViewPort();
-        service = new DomainStoryEditorService(mockDocs);
-    });
-
-    describe('registerSession', () => {
-        it('should register a new session and return sessionId', () => {
-            const sessionId = service.registerSession(documentId, 'initial content', mockView);
-
-            expect(sessionId).toBe(`${documentId}:1`);
-        });
-
-        it('should create unique sessionIds for the same document', () => {
-            const sessionId1 = service.registerSession(documentId, 'initial', mockView);
-            const sessionId2 = service.registerSession(documentId, 'other', mockView);
-
-            expect(sessionId1).toBe(`${documentId}:1`);
-            expect(sessionId2).toBe(`${documentId}:2`);
-        });
-
-        it('should maintain separate sessions for same document', async () => {
-            const view1 = new MockViewPort();
-            const view2 = new MockViewPort();
-            
-            const sessionId1 = service.registerSession(documentId, 'initial', view1);
-            const sessionId2 = service.registerSession(documentId, 'different', view2);
-            
-            await service.initialize(sessionId1);
-            await service.initialize(sessionId2);
-
-            expect(view1.getLastDisplayedContent(sessionId1)).toBe('initial');
-            expect(view2.getLastDisplayedContent(sessionId2)).toBe('different');
-        });
-
-        it('should allow registering sessions for different documents', () => {
-            const view1 = new MockViewPort();
-            const view2 = new MockViewPort();
-            const doc1 = '/path/to/file1.egn';
-            const doc2 = '/path/to/file2.egn';
-
-            const sessionId1 = service.registerSession(doc1, 'content-1', view1);
-            const sessionId2 = service.registerSession(doc2, 'content-2', view2);
-
-            expect(sessionId1).toBe(`${doc1}:1`);
-            expect(sessionId2).toBe(`${doc2}:1`);
-        });
-    });
-
-    describe('initialize', () => {
-        it('should display current content to view', async () => {
-            const sessionId = service.registerSession(documentId, 'initial content', mockView);
-
-            await service.initialize(sessionId);
-
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe('initial content');
-        });
-
-        it('should not fail for unregistered session', async () => {
-            await expect(service.initialize('unknown')).resolves.not.toThrow();
-        });
-
-        it('should display latest content if session was updated', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-            await service.syncFromWebview(sessionId, 'updated');
-
-            mockView.resetCalls(sessionId);
-            await service.initialize(sessionId);
-
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe('updated');
-        });
-    });
-
-    describe('syncFromWebview', () => {
-        it('should update document from webview', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-
-            await service.syncFromWebview(sessionId, 'updated from webview');
-
-            expect(mockDocs.getWrittenContent(documentId)).toBe('updated from webview');
-        });
-
-        it('should not fail for unregistered session', async () => {
-            await expect(service.syncFromWebview('unknown', 'text')).resolves.not.toThrow();
-        });
-
-        it('should update session content', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-
-            await service.syncFromWebview(sessionId, 'updated');
-            mockView.resetCalls(sessionId);
-            await service.initialize(sessionId);
-
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe('updated');
-        });
-
-        it('should set guard during sync to prevent echo', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-
-            await service.syncFromWebview(sessionId, 'updated');
-
-            expect(mockDocs.getWrittenContent(documentId)).toBe('updated');
-        });
-    });
-
-    describe('onDocumentChanged', () => {
-        it('should update view when document changes', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-            mockView.resetCalls(sessionId);
-
-            await service.onDocumentChanged(sessionId, 'user edited text');
-
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe('user edited text');
-        });
-
-        it('should not fail for unregistered session', async () => {
-            await expect(service.onDocumentChanged('unknown', 'text')).resolves.not.toThrow();
-        });
-
-        it('should not update view if guard is active (echo prevention)', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-            mockView.resetCalls(sessionId);
-
-            const syncPromise = service.syncFromWebview(sessionId, 'synced');
-            await service.onDocumentChanged(sessionId, 'synced');
-            await syncPromise;
-
-            expect(mockView.getDisplayCalls(sessionId).length).toBe(0);
-        });
-
-        it('should update session content', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-
-            await service.onDocumentChanged(sessionId, 'updated');
-            mockView.resetCalls(sessionId);
-            await service.initialize(sessionId);
-
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe('updated');
-        });
-    });
-
-    describe('dispose', () => {
-        it('should remove session', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-            await service.initialize(sessionId);
-
-            service.dispose(sessionId);
-            mockView.resetCalls(sessionId);
-            await service.initialize(sessionId);
-
-            expect(mockView.getDisplayCalls(sessionId).length).toBe(0);
-        });
-
-        it('should not fail for unregistered session', () => {
-            expect(() => service.dispose('unknown')).not.toThrow();
-        });
-
-        it('should allow re-registering after disposal', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-            service.dispose(sessionId);
-
-            const newSessionId = service.registerSession(documentId, 'new content', mockView);
-            await service.initialize(newSessionId);
-
-            expect(mockView.getLastDisplayedContent(newSessionId)).toBe('new content');
-        });
-    });
-
-    describe('echo prevention', () => {
-        it('should not create echo loop between webview and document', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-            mockView.resetCalls(sessionId);
-
-            await service.syncFromWebview(sessionId, 'from webview');
-            
-            const displayCallsDuringSync = mockView.getDisplayCalls(sessionId).length;
-            expect(displayCallsDuringSync).toBe(0);
-        });
-
-        it('should allow normal updates after sync completes', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-            mockView.resetCalls(sessionId);
-
-            await service.syncFromWebview(sessionId, 'synced');
-            await service.onDocumentChanged(sessionId, 'user edit');
-
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe('user edit');
-        });
-
-        it('should handle rapid alternating changes', async () => {
-            const sessionId = service.registerSession(documentId, 'initial', mockView);
-            mockView.resetCalls(sessionId);
-
-            await service.syncFromWebview(sessionId, 'v1');
-            await service.onDocumentChanged(sessionId, 'v2');
-            await service.syncFromWebview(sessionId, 'v3');
-            await service.onDocumentChanged(sessionId, 'v4');
-
-            const calls = mockView.getDisplayCalls(sessionId);
-            expect(calls).toEqual(['v2', 'v4']);
-        });
-    });
-
-    describe('multiple sessions', () => {
-        it('should handle multiple independent sessions for different documents', async () => {
-            const view1 = new MockViewPort();
-            const view2 = new MockViewPort();
-            const doc1 = '/path/to/file1.egn';
-            const doc2 = '/path/to/file2.egn';
-
-            const sessionId1 = service.registerSession(doc1, 'content-1', view1);
-            const sessionId2 = service.registerSession(doc2, 'content-2', view2);
-
-            await service.initialize(sessionId1);
-            await service.initialize(sessionId2);
-
-            expect(view1.getLastDisplayedContent(sessionId1)).toBe('content-1');
-            expect(view2.getLastDisplayedContent(sessionId2)).toBe('content-2');
-        });
-
-        it('should handle multiple sessions for the same document', async () => {
-            const view1 = new MockViewPort();
-            const view2 = new MockViewPort();
-
-            const sessionId1 = service.registerSession(documentId, 'content-1', view1);
-            const sessionId2 = service.registerSession(documentId, 'content-2', view2);
-
-            await service.initialize(sessionId1);
-            await service.initialize(sessionId2);
-
-            expect(view1.getLastDisplayedContent(sessionId1)).toBe('content-1');
-            expect(view2.getLastDisplayedContent(sessionId2)).toBe('content-2');
-            expect(sessionId1).not.toBe(sessionId2);
-        });
-
-        it('should isolate guards between sessions', async () => {
-            const view1 = new MockViewPort();
-            const view2 = new MockViewPort();
-            const doc1 = '/path/to/file1.egn';
-            const doc2 = '/path/to/file2.egn';
-
-            const sessionId1 = service.registerSession(doc1, 'initial-1', view1);
-            const sessionId2 = service.registerSession(doc2, 'initial-2', view2);
-
-            view1.resetCalls(sessionId1);
-            view2.resetCalls(sessionId2);
-
-            await service.syncFromWebview(sessionId1, 'synced-1');
-            await service.onDocumentChanged(sessionId2, 'changed-2');
-
-            expect(view1.getDisplayCalls(sessionId1).length).toBe(0);
-            expect(view2.getLastDisplayedContent(sessionId2)).toBe('changed-2');
-        });
-
-        it('should dispose sessions independently', async () => {
-            const view1 = new MockViewPort();
-            const view2 = new MockViewPort();
-            const doc1 = '/path/to/file1.egn';
-            const doc2 = '/path/to/file2.egn';
-
-            const sessionId1 = service.registerSession(doc1, 'content-1', view1);
-            const sessionId2 = service.registerSession(doc2, 'content-2', view2);
-
-            service.dispose(sessionId1);
-
-            view2.resetCalls(sessionId2);
-            await service.initialize(sessionId2);
-
-            expect(view2.getLastDisplayedContent(sessionId2)).toBe('content-2');
-        });
-    });
-
-    describe('edge cases', () => {
-        it('should handle empty content', async () => {
-            const sessionId = service.registerSession(documentId, '', mockView);
-
-            await service.initialize(sessionId);
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe('');
-
-            await service.syncFromWebview(sessionId, '');
-            expect(mockDocs.getWrittenContent(documentId)).toBe('');
-        });
-
-        it('should handle very long content', async () => {
-            const longContent = 'x'.repeat(100000);
-            const sessionId = service.registerSession(documentId, longContent, mockView);
-
-            await service.initialize(sessionId);
-
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe(longContent);
-        });
-
-        it('should handle special characters', async () => {
-            const specialContent = '特殊文字\n\t\r\n🎉\0';
-            const sessionId = service.registerSession(documentId, specialContent, mockView);
-
-            await service.initialize(sessionId);
-
-            expect(mockView.getLastDisplayedContent(sessionId)).toBe(specialContent);
-        });
     });
 });

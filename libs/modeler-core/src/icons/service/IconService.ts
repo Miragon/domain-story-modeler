@@ -184,5 +184,5 @@ function directoryName(resourceId: string): string {
 }
 
 function normalizePath(path: string): string {
-    return path.replace(/\\/g, "/");
+    return path.replace(/\\/g, "/").replace(/^([a-z]):\//i, (_match, drive: string) => `${drive.toLowerCase()}:/`).replace(/^(file:\/\/\/)([a-z]):\//i, (_match, prefix: string, drive: string) => `${prefix}${drive.toLowerCase()}:/`);
 }
