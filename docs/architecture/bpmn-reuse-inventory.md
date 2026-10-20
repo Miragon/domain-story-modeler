@@ -17,7 +17,7 @@ explicit-composition work starts from `2b87472`.
 | `libs/modeler-core/src/shared/infrastructure/WebviewMessageRouter.ts` and `.spec.ts` | Registration-based routing, ordered sequential handlers, unknown-message no-op, and propagated handler failures | Ported to `modeler-core` with generic discriminated-message/context typing; the controller retains logging and validates `unknown` transport input before routing                 |
 | `libs/shared/src/lib/messages.ts`                                                    | Explicit `type` wire literals, diagnostics, and document-flush contracts                                        | Replaced EGN constructor-name commands with directional interfaces; retained only initialization, display, synchronization, debug/error diagnostics, and reserved flush contracts |
 | `libs/shared/src/lib/host.ts`                                                        | `HostApi`, production adapter, missing-state error, replacement, and patch semantics                            | Ported to `modeler-shared`; added one-time API acquisition, concrete EGN viewport state, and identical preview merging                                                            |
-| `apps/bpmn-webview/src/host.ts`                                                      | Environment-selected production/preview host bridge                                                             | Adapted in `apps/egn-webview/src/vscode/api.ts` and `mock.ts`; preview initialization emits a revisioned display and synchronization receives a correlated result                               |
+| `apps/bpmn-webview/src/host.ts`                                                      | Environment-selected production/preview host bridge                                                             | Adapted in `apps/egn-webview/src/vscode/api.ts` and `mock.ts`; preview initialization emits a revisioned display and synchronization receives a correlated result                 |
 
 ## EGN-specific orchestration
 
@@ -35,9 +35,11 @@ SVGs, closed-document writes, and legacy/v4 preservation.
 ## Stable protocol adaptations
 
 The issue #12 port uses the same immutable BPMN source commit listed above.
-Unlike the source router, EGN transport parsing validates direction, required
-field types, session binding, and story envelopes before queueing or dispatch.
-Supported story validation is intentionally shallow: legacy icon metadata and
+Unlike the source router, EGN transport parsing validates direction and
+required transport fields before queueing or dispatch. Display content is
+deliberately left to `egon-core`'s atomic import so a malformed newer snapshot
+can invalidate the older canvas without being discarded at the transport edge.
+Outbound story validation remains strict and intentionally shallow: legacy icon metadata and
 `dst`, or v4 icon metadata and `domainStory` metadata/business-object arrays,
 must be present; icon maps must contain string SVG values. Additional document
 fields pass through unchanged and `egon-core` remains authoritative for model
@@ -52,7 +54,7 @@ uses wire literals rather than preserved constructor/function names.
 ## Deliberate exclusions
 
 No BPMN/DMN models, participant framework, public API, feature-specific routing,
-deployment, or reference-repository source was copied. Broader bootstrap, viewport, teardown, and repair handling remain deferred to issue #14.
+deployment, or reference-repository source was copied.
 Operational document flushing remains deferred to issue #15. `egon-core` remains the independent webview
 renderer.
 
@@ -62,4 +64,37 @@ The [pinned `EditorSessionStore.ts`](https://github.com/Miragon/bpmn-modeler/blo
 
 The EGN protocol adds required document revisions, per-session synchronization request IDs, and `applied`/`unchanged`/`stale`/`failed` results. The webview holds one outstanding write, queues its newest local snapshot, blocks export during a pending display, and reloads on conflicts. `VsCodeDocumentPort` uses full URIs, version and session checks, full-document ranges, EOL-aware verification, and writable-provider/permission checks. `VsCodeIconHost` applies the same writability rules to icon persistence.
 
-Regression coverage: `DomainStoryEditorService.spec.ts` (shared panels, echo guards, failure recovery, stale queues, close/reopen, duplicate events, distinct URIs, sibling failure), `VsCodeDocumentPort.spec.ts` (full range, read-only and writable provider behavior, stale version, rejected and incomplete edits), `WebviewController.spec.ts` (early tracking, shared events, spoofing, read-only initialization), `modeler-shared/src/index.spec.ts` (revision and request validation), `egn-webview/src/main.spec.ts` and `main.race.spec.ts` (acknowledgment correlation, pending edits, delayed creation and display), and `test/artifacts/protocol-artifacts.cjs` (built host and webview protocol).
+Regression coverage: `DomainStoryEditorService.spec.ts` (shared panels, echo guards, failure recovery, stale queues, close/reopen, duplicate events, distinct URIs, sibling failure), `VsCodeDocumentPort.spec.ts` (full range, read-only and writable provider behavior, stale version, rejected and incomplete edits), `WebviewController.spec.ts` (early tracking, shared events, spoofing, read-only initialization), `modeler-shared/src/index.spec.ts` (revision and request validation), `egn-webview/src/lifecycle.spec.ts` (acknowledgment correlation, pending edits, delayed creation and display), and `test/artifacts/protocol-artifacts.cjs` (built host and webview protocol).
+
+## Issue #14: webview lifecycle and recovery
+
+The reference `libs/modeler-types/src/asyncDebounce.ts` and its overlapping-run,
+cancel, flush, and serialization regressions were ported to
+`@egon/modeler-types`. EGN uses one serialized operation queue for imports,
+exports, and repair acceptance, plus the reference 100 ms inbound debounce.
+The BPMN bootstrap session-closure pattern became an explicit, idempotently
+disposable `bootstrap()` handle; EGN separates it into transport, lifecycle,
+synchronization, viewport-state, and public-EgonClient adapter modules.
+
+The reference viewport manager's validate/defer/persist/hidden-flush behavior is
+adapted to EgonClient's public `getViewport()` and `setViewport()` methods. EGN
+has no process planes, selection, or properties panel, and deliberately keeps
+EgonClient's default viewport when no valid state exists instead of fitting the
+story. Reimports capture and restore the current viewport.
+
+EGN-specific additions are correlated initialization/import/repair issues,
+actionable VS Code notifications, explicit repair acceptance through normal
+revision-checked synchronization, and an inert-but-preserved canvas during
+failure or review. `lifecycle.spec.ts`, `viewportState.spec.ts`, the shared
+protocol suite, `WebviewController.spec.ts`, and the Chromium real-client suite
+cover immediate replies, delayed creation/disposal, newest-snapshot convergence,
+malformed recovery, repair decisions, state normalization, and resource cleanup.
+The standalone preview uses the same empty-story factory, protocol decisions,
+and session-storage state rather than carrying a duplicated legacy fixture.
+
+The exception-safe creation prerequisite was implemented in
+[`egon-core` #164](https://github.com/Miragon/egon-core/pull/164) and is pinned
+here through the immutable
+[`v0.3.1` release archive](https://github.com/Miragon/egon-core/releases/tag/v0.3.1).
+The Chromium suite exercises that published client and its public lifecycle,
+viewport, event, and destruction APIs.

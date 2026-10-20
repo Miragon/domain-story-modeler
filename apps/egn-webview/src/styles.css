@@ -7,3 +7,58 @@ html, body {
     padding: 0;
     font-family: Roboto, "Helvetica Neue", sans-serif;
 }
+
+#egon-io-container {
+    height: 100%;
+    width: 100%;
+}
+
+.egon-canvas-paused {
+    pointer-events: none;
+}
+
+.egon-status {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    pointer-events: none;
+    color: var(--vscode-foreground, #333);
+    background: color-mix(in srgb, var(--vscode-editor-background, white) 72%, transparent);
+}
+
+.egon-status[hidden],
+.egon-status [hidden] {
+    display: none;
+}
+
+.egon-status button {
+    pointer-events: auto;
+    color: var(--vscode-button-foreground, white);
+    background: var(--vscode-button-background, #0e639c);
+    border: 0;
+    border-radius: 2px;
+    padding: 0.4rem 0.8rem;
+}
+
+.egon-spinner {
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 3px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: egon-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .egon-spinner {
+        animation-duration: 1.8s;
+    }
+}
+
+@keyframes egon-spin {
+    to { transform: rotate(360deg); }
+}

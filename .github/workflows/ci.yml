@@ -29,6 +29,14 @@ jobs:
       - uses: ./.github/actions/setup
       - run: yarn test
 
+  test-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - run: yarn playwright install --with-deps chromium
+      - run: yarn test:browser
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -64,6 +72,7 @@ jobs:
     needs:
       - lint
       - test-vitest
+      - test-browser
       - build
       - dependency-pins
       - dependency-review
