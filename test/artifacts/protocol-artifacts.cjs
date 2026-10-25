@@ -36,11 +36,16 @@ async function eventually(check, label) {
 
 async function testExtensionArtifact() {
   const documentListeners = [];
+  const saveListeners = [];
   const notifications = [];
   const vscode = {
     workspace: {
       onDidChangeTextDocument(listener) {
         documentListeners.push(listener);
+        return disposable();
+      },
+      onWillSaveTextDocument(listener) {
+        saveListeners.push(listener);
         return disposable();
       },
       getWorkspaceFolder() {
@@ -248,6 +253,20 @@ async function testExtensionArtifact() {
   );
   assert.equal(writes.length, 1);
 
+  let saveWait;
+  saveListeners[0]({
+    document,
+    reason: 2,
+    waitUntil(promise) { saveWait = promise; },
+  });
+  await eventually(
+    () => posted.some((message) => message.type === "FlushDocumentQuery"),
+    "save-time flush request",
+  );
+  const flush = posted.find((message) => message.type === "FlushDocumentQuery");
+  messages[0]({ type: "DocumentFlushedCommand", token: flush.token, status: "clean" });
+  assert.deepEqual(await saveWait, []);
+
   messages[0]({
     type: "SyncDocumentCommand",
     sessionId: "session-1",
@@ -335,6 +354,13 @@ async function testWebviewArtifact() {
   await eventually(
     () => posted.some((message) => message.type === "LogErrorCommand"),
     "invalid display diagnostics",
+  );
+  dom.window.dispatchEvent(new dom.window.MessageEvent("message", {
+    data: { type: "FlushDocumentQuery", token: 7, destructive: false, exportWhenClean: false },
+  }));
+  await eventually(
+    () => posted.some((message) => message.type === "DocumentFlushedCommand" && message.token === 7),
+    "unavailable flush response",
   );
   assert.equal(state.editorId, "artifact-session");
 

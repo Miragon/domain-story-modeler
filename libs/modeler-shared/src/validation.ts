@@ -1,5 +1,4 @@
 import {
-  DocumentFlushedResponse,
   HostToWebviewMessage,
   ReportWebviewIssueCommand,
   WebviewToHostMessage,
@@ -53,14 +52,6 @@ function revisionField(value: Record<string, unknown>, key: string): number {
   if (!Number.isSafeInteger(field) || field < 0)
     return invalid(`${key} must be a nonnegative integer`);
   return field;
-}
-
-function optionalNumericField(
-  value: Record<string, unknown>,
-  key: string,
-): number | undefined {
-  if (value[key] === undefined) return undefined;
-  return numericField(value, key);
 }
 
 function booleanField(value: Record<string, unknown>, key: string): boolean {
@@ -147,8 +138,8 @@ export function validateDomainStoryText(
 
 function parseDocumentFlushed(
   message: Record<string, unknown>,
-): DocumentFlushedResponse {
-  const token = numericField(message, "token");
+): WebviewToHostMessage {
+  const token = revisionField(message, "token");
   const status = stringField(message, "status");
   if (
     !(["clean", "flushed", "host-updated", "unavailable"] as const).includes(
@@ -158,12 +149,16 @@ function parseDocumentFlushed(
     return invalid(`unknown document flush status: ${status}`);
   }
   const content = optionalStringField(message, "content");
-  const documentRevision = optionalNumericField(message, "documentRevision");
+  const documentRevision = message["documentRevision"] === undefined
+    ? undefined : revisionField(message, "documentRevision");
 
   if (status === "flushed") {
     if (content === undefined)
       invalid("flushed responses must contain content");
+    if (documentRevision === undefined)
+      invalid("flushed responses must contain documentRevision");
     validateDomainStoryText(content);
+    return { type: "DocumentFlushedCommand", token, status, content, documentRevision };
   } else if (content !== undefined || documentRevision !== undefined) {
     invalid(
       `${status} responses must not contain content or a document revision`,
@@ -173,13 +168,7 @@ function parseDocumentFlushed(
     invalid("documentRevision requires content");
   }
 
-  return {
-    type: "DocumentFlushedCommand",
-    token,
-    status: status as DocumentFlushedResponse["status"],
-    ...(content === undefined ? {} : { content }),
-    ...(documentRevision === undefined ? {} : { documentRevision }),
-  };
+  return { type: "DocumentFlushedCommand", token, status: status as "clean" | "host-updated" | "unavailable" };
 }
 
 export function parseWebviewToHostMessage(
@@ -296,12 +285,12 @@ export function parseHostToWebviewMessage(
     case "FlushDocumentQuery":
       return {
         type,
-        token: numericField(message, "token"),
+        token: revisionField(message, "token"),
         destructive: booleanField(message, "destructive"),
         exportWhenClean: booleanField(message, "exportWhenClean"),
       };
     case "ReleaseDocumentFlushQuery":
-      return { type, token: numericField(message, "token") };
+      return { type, token: revisionField(message, "token") };
     default:
       return invalid(`unsupported host-to-webview message type: ${type}`);
   }

@@ -9,6 +9,7 @@ import {
 import {
   DisposalScope,
   DomainStoryEditorService,
+  DocumentFlushService,
   IconInitializationError,
   IconService,
   LoggerPort,
@@ -63,8 +64,16 @@ export class WebviewController implements CustomTextEditorProvider {
   >;
   private readonly renderUi: typeof domainStoryEditorUi;
   private disposed = false;
+  readonly flushService: DocumentFlushService;
 
   constructor(private readonly dependencies: WebviewControllerDependencies) {
+    this.flushService = new DocumentFlushService({
+      isCurrent: (sessionId) => [...this.panels.values()].some((entry) => entry.sessionId === sessionId && !entry.scope.isRetired),
+      post: async (sessionId, message) => {
+        const panel = [...this.panels].find(([, entry]) => entry.sessionId === sessionId && !entry.scope.isRetired)?.[0];
+        return panel ? panel.webview.postMessage(message) : false;
+      },
+    });
     this.renderUi = dependencies.renderUi ?? domainStoryEditorUi;
     this.scope.add(
       workspace.onDidChangeTextDocument((event) => {
@@ -262,7 +271,15 @@ export class WebviewController implements CustomTextEditorProvider {
       return;
     }
     if (lifetime.phase !== "ready") {
+      if (message.type === "DocumentFlushedCommand") {
+        this.flushService.handleReply(lifetime.sessionId, message);
+        return;
+      }
       lifetime.pendingMessages.push(message);
+      return;
+    }
+    if (message.type === "DocumentFlushedCommand") {
+      this.flushService.handleReply(lifetime.sessionId, message);
       return;
     }
     void this.dispatch(lifetime, message).catch((error) => {
@@ -298,6 +315,7 @@ export class WebviewController implements CustomTextEditorProvider {
 
   private retire(panel: WebviewPanel, lifetime: EditorLifetime): void {
     lifetime.phase = "retired";
+    this.flushService.retire(lifetime.sessionId);
     lifetime.scope.dispose();
     if (this.panels.get(panel) === lifetime) this.panels.delete(panel);
   }

@@ -69,6 +69,7 @@ export const workspace = {
   openTextDocument: vi.fn(),
   applyEdit: vi.fn(),
   onDidChangeTextDocument: vi.fn(disposable),
+  onWillSaveTextDocument: vi.fn(disposable),
   createFileSystemWatcher: vi.fn(),
   fs: {
     readFile: vi.fn(),

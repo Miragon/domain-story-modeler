@@ -35,6 +35,41 @@ function fixture() {
 }
 
 describe("DomainStoryEditorService", () => {
+    it("drains a posted write before confirming a clean flush", async () => {
+        const f = fixture();
+        const session = f.open();
+        const hold = deferred<void>();
+        vi.mocked(f.docs.write).mockImplementationOnce(async (id, text, version) => {
+            await hold.promise;
+            const snapshot = { text, version: version + 1 };
+            f.texts.set(id, snapshot);
+            return { status: "applied", snapshot };
+        });
+        const writing = f.service.syncFromWebview(session, "committed", 0, 1);
+        const verified = f.service.verifyFlush("file:///story.egn", [session]);
+        let settled = false;
+        void verified.then(() => { settled = true; });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        hold.resolve();
+        await writing;
+        await expect(verified).resolves.toBe(true);
+        await expect(f.service.verifyFlush("file:///story.egn", [session], {
+            content: "committed", documentRevision: 1,
+        })).resolves.toBe(true);
+    });
+
+    it("rejects a flush snapshot after newer source content arrives", async () => {
+        const f = fixture();
+        const session = f.open();
+        f.texts.set("file:///story.egn", { text: "newer source", version: 2 });
+        await expect(f.service.verifyFlush("file:///story.egn", [session], {
+            content: "old", documentRevision: 0,
+        })).resolves.toBe(false);
+        await f.service.initialize(session);
+        expect(f.displays.at(-1)).toEqual([session, "newer source", 1]);
+    });
+
     it("uses opaque, never-reused sessions and one document snapshot across panels", async () => {
         const f = fixture();
         const a = f.open("file:///a:1.egn");

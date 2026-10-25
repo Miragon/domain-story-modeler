@@ -11,10 +11,11 @@ message in the wrong direction. `parseWebviewToHostMessage` and
 `parseHostToWebviewMessage` are the transport boundaries: callers must pass
 received values as `unknown` and dispatch only the returned value.
 
-The active protocol covers initialization, display, synchronization, and
-debug/error diagnostics. Flush request, release, and response contracts are
-reserved for issue #15; this package validates them but does not implement a
-flush workflow.
+The active protocol covers initialization, display, synchronization, save-time
+flush requests and replies, lock release, and debug/error diagnostics. The
+browser-safe flush responder coordinates token-specific interaction locks;
+operational `flushed` replies carry validated content and its acknowledged
+document revision.
 
 Synchronization and non-empty display payloads must contain a supported EGN
 envelope. The validator accepts legacy `domain`/`dst` and v4
