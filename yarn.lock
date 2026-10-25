@@ -117,6 +117,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@egon/modeler-core@workspace:libs/modeler-core"
   dependencies:
+    "@egon/modeler-shared": "workspace:*"
     "@egon/modeler-types": "workspace:*"
   languageName: unknown
   linkType: soft

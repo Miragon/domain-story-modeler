@@ -78,19 +78,16 @@ export function activate(
       extensionUri: context.extensionUri,
       extensionId: EXTENSION_ID,
       app: editorService,
-      icons: iconService,
       logger,
       notifier,
       interaction: overrides.interaction ?? new VsCodeWebviewInteraction(),
       createView:
         overrides.createView ?? ((panel) => new VsCodeViewPort(panel)),
     });
-    const watcherController = new IconWatcherController(
-      iconService,
-      logger,
-      notifier,
-    );
-    new DocumentSaveFlushController(editorService, editorController, logger).register(activation);
+    const flushController = new DocumentSaveFlushController(editorService, editorController, logger);
+    const watcherController = new IconWatcherController(iconService, editorService, flushController, editorController, logger, notifier);
+    editorController.setIconRefresh((id) => watcherController.refreshNow(id));
+    flushController.register(activation);
 
     activation.add(
       (overrides.registerEditor ?? registerEditor)(
@@ -117,6 +114,5 @@ function createIconHost(): IconHostPorts {
   return {
     workspaceFolders: adapter,
     files: adapter,
-    textDocuments: adapter,
   };
 }

@@ -1,188 +1,149 @@
-import {
-    FileDiscoveryPort,
-    FileReadPort,
-    FileWritePort,
-    LifetimePort,
-    TextDocumentReadPort,
-    WorkspaceFolderPort,
-} from "../../shared/domain/hostPorts";
-import { Icon, IconChangeKind } from "../domain";
-import { ICON_BASE_PATH, tryParseIconPath } from "../domain/IconPathParser";
-import { ApplyIconChange } from "./ApplyIconChange";
-import { SyncIconsFromSet } from "./SyncIconsFromSet";
+import { validateDomainStoryText } from "@egon/modeler-shared";
+import { DomainStoryDocument, isV4DomainStoryDocument } from "@egon/modeler-types";
+import { FileReadPort, LifetimePort, WorkspaceFolderPort } from "../../shared/domain/hostPorts";
+import { IconType } from "../domain";
+import { tryParseIconPath } from "../domain/IconPathParser";
 
-const ACTIVE_LIFETIME: LifetimePort = { isRetired: false };
-
-export type IconInitializationFailureStage = "load" | "merge" | "write";
-
-export class IconInitializationError extends Error {
-    constructor(
-        readonly stage: IconInitializationFailureStage,
-        readonly reason: unknown,
-    ) {
-        super(`Icon initialization failed during ${stage}`);
-        this.name = "IconInitializationError";
-    }
+export interface IconDirectoryEntry { readonly name: string; readonly kind: "file" | "directory" }
+export interface IconDirectoryPort {
+    readDirectory(directoryId: string): Promise<readonly IconDirectoryEntry[]>;
+    joinPath(directoryId: string, name: string): string;
+    parentPath(resourceId: string): string;
 }
-
 export interface IconHostPorts {
     workspaceFolders: WorkspaceFolderPort;
-    files: FileDiscoveryPort & FileReadPort & FileWritePort;
-    textDocuments: TextDocumentReadPort;
+    files: FileReadPort & IconDirectoryPort;
+}
+export interface DiscoveredIcon {
+    readonly type: IconType;
+    readonly name: string;
+    readonly svg: string;
+    readonly source: string;
+}
+export interface ManagedIcon { readonly source: string; readonly svg: string }
+export interface IconReconciliation {
+    readonly text: string;
+    readonly ownership: ReadonlyMap<string, ManagedIcon>;
 }
 
-/** Host-independent orchestration for custom icon loading and propagation. */
+/** Discovers visible SVGs and reconciles only an already-open story buffer. */
 export class IconService {
-    private readonly syncIcons = new SyncIconsFromSet();
-    private readonly applyIconChange = new ApplyIconChange();
-
+    private readonly ownership = new Map<string, ReadonlyMap<string, ManagedIcon>>();
     constructor(private readonly host: IconHostPorts) {}
 
-    /**
-     * Loads all icons visible to a story, merges them into the latest snapshot,
-     * and persists the result. An undefined result means the lifetime retired.
-     */
-    async initializeDocument(
-        documentId: string,
-        currentText: () => string,
-        lifetime: LifetimePort = ACTIVE_LIFETIME,
-    ): Promise<string | undefined> {
-        const workspaceFolderId = this.host.workspaceFolders.getWorkspaceFolder(documentId);
-        if (!workspaceFolderId) return currentText();
-
-        let icons: Icon[];
-        try {
-            icons = await this.loadVisibleIcons(workspaceFolderId, documentId, lifetime);
-        } catch (error) {
-            throw new IconInitializationError("load", error);
+    async discover(documentId: string, lifetime?: LifetimePort): Promise<DiscoveredIcon[]> {
+        const root = this.host.workspaceFolders.getWorkspaceFolder(documentId);
+        if (!root) return [];
+        const ancestors: string[] = [];
+        let directory = this.host.files.parentPath(documentId);
+        while (contains(root, directory)) {
+            ancestors.push(directory);
+            if (sameLocation(root, directory)) break;
+            const parent = this.host.files.parentPath(directory);
+            if (sameLocation(parent, directory)) break;
+            directory = parent;
         }
-        if (lifetime.isRetired) return undefined;
-
-        let merged: string;
-        try {
-            merged = this.syncIcons.execute(currentText(), icons);
-        } catch (error) {
-            throw new IconInitializationError("merge", error);
-        }
-        if (lifetime.isRetired) return undefined;
-
-        try {
-            await this.host.files.writeFile(documentId, merged);
-        } catch (error) {
-            throw new IconInitializationError("write", error);
-        }
-        if (lifetime.isRetired) return undefined;
-
-        return merged;
-    }
-
-    /** Applies a created, updated, or deleted SVG to every affected story. */
-    async applyChange(
-        iconId: string,
-        kind: IconChangeKind,
-        lifetime: LifetimePort = ACTIVE_LIFETIME,
-    ): Promise<void> {
-        const metadata = tryParseIconPath(iconId);
-        if (!metadata) return;
-
-        const workspaceFolderId = this.host.workspaceFolders.getWorkspaceFolder(iconId);
-        if (!workspaceFolderId || lifetime.isRetired) return;
-
-        const iconBaseDirectory = getIconBaseDirectory(iconId);
-        if (!iconBaseDirectory) return;
-
-        const documentIds = await this.host.files.findFiles(workspaceFolderId, "**/*.egn");
-        if (lifetime.isRetired) return;
-
-        let svg: string | undefined;
-        if (kind !== "delete") {
-            svg = await this.host.textDocuments.readTextDocument(iconId);
-            if (lifetime.isRetired || !svg.trim()) return;
-        }
-
-        for (const documentId of documentIds) {
-            if (lifetime.isRetired || !isDocumentAffectedByIcon(documentId, iconBaseDirectory)) {
-                continue;
+        const selected = new Map<string, DiscoveredIcon>();
+        for (const ancestor of ancestors) {
+            for (const [folder, type] of [["actors", IconType.Actor], ["work-objects", IconType.WorkObject]] as const) {
+                const base = this.host.files.joinPath(ancestor, ".egon/icons");
+                const category = this.host.files.joinPath(base, folder);
+                const candidates = await this.walk(category, lifetime);
+                candidates.sort();
+                for (const source of candidates) {
+                    if (lifetime?.isRetired) return [];
+                    const metadata = tryParseIconPath(source);
+                    if (!metadata || metadata.type !== type) continue;
+                    const key = iconKey(type, metadata.name.value);
+                    if (selected.has(key)) continue;
+                    const svg = await this.host.files.readFile(source);
+                    if (!svg.trim()) continue;
+                    selected.set(key, { type, name: metadata.name.value, svg, source });
+                }
             }
-
-            const text = await this.host.files.readFile(documentId);
-            if (lifetime.isRetired) return;
-
-            const updated = this.applyIconChange.execute(text, {
-                type: metadata.type,
-                name: metadata.name,
-                kind,
-                svg,
-            });
-            if (lifetime.isRetired) return;
-
-            await this.host.files.writeFile(documentId, updated);
-            if (lifetime.isRetired) return;
         }
+        return [...selected.values()];
     }
 
-    private async loadVisibleIcons(
-        workspaceFolderId: string,
-        documentId: string,
-        lifetime: LifetimePort,
-    ): Promise<Icon[]> {
-        const iconIds = await this.host.files.findFiles(
-            workspaceFolderId,
-            `**/${ICON_BASE_PATH}/**/*.svg`,
-        );
-        if (lifetime.isRetired) return [];
-
-        const documentDirectory = directoryName(documentId);
-        const icons: Icon[] = [];
-        for (const iconId of iconIds) {
-            if (
-                lifetime.isRetired ||
-                !isIconVisibleToDocument(iconId, workspaceFolderId, documentDirectory)
-            ) {
-                continue;
+    reconcile(documentId: string, currentText: string, icons: readonly DiscoveredIcon[], deletionObserved = false): IconReconciliation {
+        validateDomainStoryText(currentText);
+        const doc = JSON.parse(currentText) as DomainStoryDocument;
+        const set = isV4DomainStoryDocument(doc) ? doc.iconSet : doc.domain;
+        const previous = this.ownership.get(documentId) ?? new Map<string, ManagedIcon>();
+        const next = new Map<string, ManagedIcon>();
+        let changed = false;
+        for (const icon of icons) {
+            const map = icon.type === IconType.Actor ? set.actors : set.workObjects;
+            const key = iconKey(icon.type, icon.name);
+            if (map[icon.name] !== icon.svg) {
+                map[icon.name] = icon.svg;
+                changed = true;
             }
-
-            const metadata = tryParseIconPath(iconId);
-            if (!metadata) continue;
-
-            const svg = await this.host.files.readFile(iconId);
-            if (lifetime.isRetired) return [];
-
-            icons.push({ ...metadata, svg });
+            next.set(key, { source: icon.source, svg: icon.svg });
         }
-        return icons;
+        for (const [key, managed] of previous) {
+            if (next.has(key)) continue;
+            const [type, name] = splitKey(key);
+            const map = type === IconType.Actor ? set.actors : set.workObjects;
+            if (deletionObserved && map[name] === managed.svg) {
+                delete map[name];
+                changed = true;
+            } else if (!deletionObserved && map[name] !== undefined) {
+                next.set(key, managed);
+            }
+        }
+        return { text: changed ? JSON.stringify(doc, null, 2) : currentText, ownership: next };
+    }
+
+    commit(documentId: string, result: IconReconciliation): void {
+        this.ownership.set(documentId, result.ownership);
+    }
+
+    close(documentId: string): void { this.ownership.delete(documentId); }
+
+    private async walk(directory: string, lifetime?: LifetimePort): Promise<string[]> {
+        if (lifetime?.isRetired) return [];
+        const entries = await this.host.files.readDirectory(directory);
+        const files: string[] = [];
+        for (const entry of entries) {
+            if (lifetime?.isRetired) return [];
+            const child = this.host.files.joinPath(directory, entry.name);
+            if (entry.kind === "directory") files.push(...await this.walk(child, lifetime));
+            else if (entry.name.toLowerCase().endsWith(".svg")) files.push(child);
+        }
+        return files;
     }
 }
 
-export function getIconBaseDirectory(iconId: string): string | undefined {
-    const normalized = normalizePath(iconId);
-    const match = normalized.match(/(.*)\/\.egon\/icons\//);
-    return match?.[1];
+function iconKey(type: IconType, name: string): string { return `${type}\0${name}`; }
+function splitKey(key: string): [IconType, string] {
+    const index = key.indexOf("\0");
+    return [key.slice(0, index) as IconType, key.slice(index + 1)];
 }
 
-export function isIconVisibleToDocument(
-    iconId: string,
-    workspaceFolderId: string,
-    documentDirectory: string,
-): boolean {
-    const iconBaseDirectory = getIconBaseDirectory(iconId);
-    if (!iconBaseDirectory) return false;
-
-    return (
-        iconBaseDirectory.startsWith(normalizePath(workspaceFolderId)) &&
-        normalizePath(documentDirectory).startsWith(iconBaseDirectory)
-    );
+function location(id: string): { origin: string; path: string } {
+    const normalized = id.replace(/\\/g, "/");
+    const match = normalized.match(/^([a-z][a-z\d+.-]*:\/\/[^/]*)(\/[^?#]*)/i);
+    const origin = match ? match[1].toLowerCase() : "";
+    let path = match ? match[2] : normalized;
+    path = path.replace(/^\/([a-z]):(?=\/)/i, (_match, drive: string) => `/${drive.toLowerCase()}:`)
+        .replace(/^([a-z]):(?=\/)/i, (_match, drive: string) => `${drive.toLowerCase()}:`)
+        .replace(/\/$/, "") || "/";
+    return { origin, path };
 }
-
-export function isDocumentAffectedByIcon(documentId: string, iconBaseDirectory: string): boolean {
-    return directoryName(documentId).startsWith(normalizePath(iconBaseDirectory));
+export function sameLocation(a: string, b: string): boolean {
+    const left = location(a); const right = location(b);
+    return left.origin === right.origin && left.path === right.path;
 }
-
-function directoryName(resourceId: string): string {
-    const normalized = normalizePath(resourceId);
-    return normalized.substring(0, normalized.lastIndexOf("/"));
+export function contains(parent: string, child: string): boolean {
+    const root = location(parent); const target = location(child);
+    return root.origin === target.origin && (root.path === target.path || target.path.startsWith(root.path === "/" ? "/" : `${root.path}/`));
 }
-
-function normalizePath(path: string): string {
-    return path.replace(/\\/g, "/").replace(/^([a-z]):\//i, (_match, drive: string) => `${drive.toLowerCase()}:/`).replace(/^(file:\/\/\/)([a-z]):\//i, (_match, prefix: string, drive: string) => `${prefix}${drive.toLowerCase()}:/`);
+export function isIconVisibleToDocument(iconId: string, workspaceFolderId: string, documentDirectory: string): boolean {
+    const parts = location(iconId).path.split("/");
+    const index = parts.lastIndexOf(".egon");
+    if (index < 0 || parts[index + 1] !== "icons") return false;
+    const base = parts.slice(0, index).join("/") || "/";
+    const origin = location(iconId).origin;
+    return contains(workspaceFolderId, `${origin}${base}`) && contains(`${origin}${base}`, documentDirectory);
 }

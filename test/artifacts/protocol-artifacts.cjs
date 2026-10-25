@@ -40,6 +40,7 @@ async function testExtensionArtifact() {
   const notifications = [];
   const vscode = {
     workspace: {
+      textDocuments: [],
       onDidChangeTextDocument(listener) {
         documentListeners.push(listener);
         return disposable();
@@ -191,6 +192,7 @@ async function testExtensionArtifact() {
     version: 1,
     getText: () => story,
   };
+  vscode.workspace.textDocuments.push(document);
   await controller.resolveCustomTextEditor(document, panel);
 
   messages[0]({ type: "InitializeWebviewCommand" });

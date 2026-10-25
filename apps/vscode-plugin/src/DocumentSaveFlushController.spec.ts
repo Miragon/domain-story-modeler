@@ -9,10 +9,11 @@ function setup(sessions = ["a", "b"]) {
     sessionIds: vi.fn(() => sessions),
     isCurrentSession: vi.fn(() => true),
     verifyFlush: vi.fn(async () => true),
+    documentState: vi.fn(() => ({ version: 1, revision: 0 })),
   } as unknown as DomainStoryEditorService;
   const requestFlush = vi.fn(async (): Promise<DocumentFlushResult> => ({ status: "clean" }));
   const releaseFlush = vi.fn();
-  const editor = { flushService: { requestFlush, releaseFlush } } as unknown as WebviewController;
+  const editor = { readySessionIds: vi.fn(() => sessions), flushService: { requestFlush, releaseFlush } } as unknown as WebviewController;
   const logger: LoggerPort = { debug: vi.fn(), error: vi.fn() };
   return { controller: new DocumentSaveFlushController(app, editor, logger), app, requestFlush, releaseFlush };
 }
@@ -24,6 +25,7 @@ describe("DocumentSaveFlushController", () => {
     expect(result.status).toBe("confirmed");
     expect(requestFlush).toHaveBeenCalledTimes(2);
     expect(app.verifyFlush).toHaveBeenCalledWith("file:///story.egn", ["a", "b"], undefined);
+    expect(result).toMatchObject({ status: "confirmed", lease: { version: 1, revision: 0 } });
   });
 
   it("registers synchronous waitUntil for autosave and leaves unrelated documents alone", async () => {

@@ -24,6 +24,7 @@ export const Range = vi.fn(function Range(
 });
 
 export const FilePermission = { Readonly: 1 };
+export const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
 
 export interface MockPosition {
   line: number;
@@ -40,15 +41,17 @@ export const Position = vi.fn(function Position(
 });
 
 export const Uri = {
-  file: vi.fn((path: string) => ({ fsPath: path, path, toString: () => path })),
+  file: vi.fn((path: string) => ({ fsPath: path, path, toString: () => path, with: () => ({ path, toString: () => path }) })),
   parse: vi.fn((value: string) => ({
     scheme: value.split(":", 1)[0],
     path: value,
     toString: () => value,
+    with: () => ({ path: value.replace(/[?#].*$/, ""), toString: () => value.replace(/[?#].*$/, "") }),
   })),
-  joinPath: vi.fn((base: { path: string }, ...parts: string[]) => ({
-    path: [base.path.replace(/\/$/, ""), ...parts].join("/"),
-  })),
+  joinPath: vi.fn((base: { path: string; toString?: () => string }, ...parts: string[]) => {
+    const path = [base.path.replace(/\/$/, ""), ...parts].join("/").replace(/\/[^/]+\/\.\.(?=\/|$)/g, "");
+    return { path, toString: () => path, with: () => ({ path, toString: () => path }) };
+  }),
 };
 
 export const RelativePattern = vi.fn(function RelativePattern(
@@ -63,16 +66,22 @@ export const RelativePattern = vi.fn(function RelativePattern(
 const disposable = () => ({ dispose: vi.fn() });
 
 export const workspace = {
+  textDocuments: [] as unknown[],
+  workspaceFolders: [] as unknown[],
   getConfiguration: vi.fn(),
   getWorkspaceFolder: vi.fn(),
   findFiles: vi.fn(),
   openTextDocument: vi.fn(),
   applyEdit: vi.fn(),
   onDidChangeTextDocument: vi.fn(disposable),
+  onDidOpenTextDocument: vi.fn(disposable),
+  onDidCloseTextDocument: vi.fn(disposable),
+  onDidChangeWorkspaceFolders: vi.fn(disposable),
   onWillSaveTextDocument: vi.fn(disposable),
   createFileSystemWatcher: vi.fn(),
   fs: {
     readFile: vi.fn(),
+    readDirectory: vi.fn(),
     writeFile: vi.fn(),
     stat: vi.fn(async () => ({ permissions: 0 })),
     isWritableFileSystem: vi.fn(() => true),

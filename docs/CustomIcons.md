@@ -1,8 +1,9 @@
 # Custom icons
 
 The VS Code extension loads custom SVG icons from `.egon/icons` directories and
-embeds them in each affected `.egn` document. Icons placed nearer to a story in
-the workspace hierarchy take part in that story's icon set.
+embeds them in open `.egn` documents. It scans from the story's directory up to
+its containing workspace root. A nearer directory wins when icon names collide;
+within one directory, the first SVG path in lexicographic order wins.
 
 ```text
 .egon/
@@ -16,9 +17,19 @@ the workspace hierarchy take part in that story's icon set.
 The file name without `.svg` becomes the icon name. Actor icons belong in
 `actors`; work-object icons belong in `work-objects`.
 
-Workspace icon creation, changes, and deletion are coordinated by the services
-in `libs/modeler-core` and the adapters in `apps/vscode-plugin`. They understand
-both supported file shapes:
+Icon creation, changes, and deletion refresh already-open story buffers, including
+text editors and modeler editors. The change is an undoable editor edit that marks
+the buffer dirty; Save or Auto Save persists it. Closed stories are not opened or
+changed. Stories outside workspace folders retain their embedded icons.
+
+The extension tracks which SVG supplied each icon for the current open session.
+After an observed deletion, it first looks for an ancestor icon with the same
+name. Otherwise, it removes an icon only when its embedded SVG still matches the
+last synchronized SVG. Manual edits and unrelated embedded icons remain. Closing
+the document clears this tracking; reopening after an offline deletion preserves
+the embedded icon.
+
+The services understand both supported file shapes:
 
 - EGN v4 stores icons under `iconSet` and elements and metadata under
   `domainStory`.

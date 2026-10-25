@@ -5,6 +5,8 @@ import { WebviewController } from "./WebviewController";
 export interface ConfirmedFlushLease {
   readonly documentId: string;
   readonly sessions: readonly string[];
+  readonly version: number;
+  readonly revision: number;
   release(): void;
 }
 
@@ -30,7 +32,7 @@ export class DocumentSaveFlushController {
   }
 
   async flush(documentId: string, destructive = false): Promise<SaveFlushResult> {
-    const sessions = this.app.sessionIds(documentId);
+    const sessions = this.editor.readySessionIds(documentId);
     if (!sessions.length) return { status: "closed" };
     const release = (): void => { for (const id of sessions) this.editor.flushService.releaseFlush(id); };
     const deadline = Date.now() + 500;
@@ -49,12 +51,14 @@ export class DocumentSaveFlushController {
         if (results.some((result) => result.status === "unavailable")) return { status: "unavailable" };
         if (destructive && results.some((result) => result.status === "host-updated")) return { status: "unavailable" };
         if (sessions.some((id) => !this.app.isCurrentSession(documentId, id)) ||
-          this.app.sessionIds(documentId).length !== sessions.length) return { status: "closed" };
+          this.editor.readySessionIds(documentId).length !== sessions.length) return { status: "closed" };
         const flushed = results.filter((result): result is Extract<DocumentFlushResult, { status: "flushed" }> => result.status === "flushed");
         for (const result of flushed.length ? flushed : [undefined]) {
           if (!await this.app.verifyFlush(documentId, sessions, result)) return { status: "unavailable" };
         }
-        return { status: "confirmed", lease: { documentId, sessions, release } };
+        const state = this.app.documentState(documentId);
+        if (!state) return { status: "closed" };
+        return { status: "confirmed", lease: { documentId, sessions, version: state.version, revision: state.revision, release } };
       } catch (error) {
         this.logger.error("Failed to flush the domain story before save", error);
         return { status: "unavailable" };

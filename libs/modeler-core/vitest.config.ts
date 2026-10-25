@@ -12,6 +12,7 @@ export default defineConfig({
                 __dirname,
                 "../modeler-types/src/index.ts",
             ),
+            "@egon/modeler-shared": resolve(__dirname, "../modeler-shared/src/index.ts"),
         },
     },
 });

@@ -1,5 +1,5 @@
 import type { TextDocument } from "vscode";
-import { FilePermission, Range, Uri, workspace, WorkspaceEdit } from "vscode";
+import { FilePermission, Range, workspace, WorkspaceEdit } from "vscode";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VsCodeDocumentPort } from "./VsCodeDocumentPort";
 
@@ -14,6 +14,7 @@ beforeEach(() => {
     text = "old\ncontent";
     version = 4;
     const doc = {
+        uri: { toString: () => id },
         get version() { return version; },
         getText: () => text,
         positionAt: (offset: number) => {
@@ -21,7 +22,7 @@ beforeEach(() => {
             return { line: before.length - 1, character: before.at(-1)!.length };
         },
     } as TextDocument;
-    vi.mocked(workspace.openTextDocument).mockResolvedValue(doc);
+    vi.mocked(workspace.textDocuments).splice(0, Infinity, doc);
     vi.mocked(workspace.fs.isWritableFileSystem).mockReturnValue(true);
     vi.mocked(workspace.fs.stat).mockResolvedValue({ permissions: 0 } as never);
     edit = { replace: vi.fn() };
@@ -36,8 +37,7 @@ beforeEach(() => {
 describe("VsCodeDocumentPort", () => {
     it("reads using the complete URI and returns host version", async () => {
         expect(await port.read(id)).toEqual({ text, version });
-        expect(Uri.parse).toHaveBeenCalledWith(id);
-        expect(workspace.openTextDocument).toHaveBeenCalledWith(expect.objectContaining({ path: id }));
+        expect(workspace.openTextDocument).not.toHaveBeenCalled();
     });
 
     it("replaces the full range, including content beyond 10,000 lines", async () => {
@@ -65,6 +65,13 @@ describe("VsCodeDocumentPort", () => {
         expect((await port.write(id, "new", 3, () => true)).status).toBe("stale");
         expect((await port.write(id, "new", 4, () => false)).status).toBe("stale");
         expect(workspace.applyEdit).not.toHaveBeenCalled();
+    });
+
+    it("never reopens a closed document", async () => {
+        vi.mocked(workspace.textDocuments).splice(0);
+        await expect(port.read(id)).rejects.toThrow("no longer open");
+        await expect(port.write(id, "new", 4, () => true)).rejects.toThrow("no longer open");
+        expect(workspace.openTextDocument).not.toHaveBeenCalled();
     });
 
     it("rechecks currency after asynchronous permission lookup", async () => {

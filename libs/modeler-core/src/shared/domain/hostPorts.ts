@@ -29,24 +29,9 @@ export interface WorkspaceFolderPort {
     getWorkspaceFolder(resourceId: string): string | undefined;
 }
 
-/** Host capability for discovering files without exposing host URI types. */
-export interface FileDiscoveryPort {
-    findFiles(workspaceFolderId: string, pattern: string): Promise<string[]>;
-}
-
 /** Host capability for reading a file directly from the filesystem. */
 export interface FileReadPort {
     readFile(resourceId: string): Promise<string>;
-}
-
-/** Host capability for reading through the host's text-document abstraction. */
-export interface TextDocumentReadPort {
-    readTextDocument(resourceId: string): Promise<string>;
-}
-
-/** Host capability for writing a file directly to the filesystem. */
-export interface FileWritePort {
-    writeFile(resourceId: string, text: string): Promise<void>;
 }
 
 /** Diagnostic output used by controllers and registration functions. */
