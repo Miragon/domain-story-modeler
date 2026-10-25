@@ -11,6 +11,7 @@ import {
 } from "@egon/modeler-core";
 import { ExtensionContext, OutputChannel, WebviewPanel, window } from "vscode";
 import { IconWatcherController } from "./IconWatcherController";
+import { DocumentSaveFlushController } from "./DocumentSaveFlushController";
 import { WebviewController } from "./WebviewController";
 import { VsCodeDocumentPort } from "./infrastructure/VsCodeDocumentPort";
 import { VsCodeIconHost } from "./infrastructure/VsCodeIconHost";
@@ -89,6 +90,7 @@ export function activate(
       logger,
       notifier,
     );
+    new DocumentSaveFlushController(editorService, editorController, logger).register(activation);
 
     activation.add(
       (overrides.registerEditor ?? registerEditor)(

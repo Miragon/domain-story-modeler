@@ -134,6 +134,21 @@ describe("WebviewController", () => {
     c.dispose();
   });
 
+  it("routes flush replies immediately while startup messages are buffered", async () => {
+    const hold = deferred<string>();
+    vi.mocked(icons.initializeDocument).mockReturnValueOnce(hold.promise);
+    const c = controller();
+    const p = panel();
+    const opening = c.resolveCustomTextEditor(document(), p.panel);
+    const pending = c.flushService.requestFlush("session-1");
+    expect(p.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "FlushDocumentQuery", token: 1 }));
+    p.messages[0]({ type: "DocumentFlushedCommand", token: 1, status: "clean" });
+    await expect(pending).resolves.toEqual({ status: "clean" });
+    hold.resolve(story);
+    await opening;
+    c.dispose();
+  });
+
   it("processes each event once across panels and retires them independently", async () => {
     const c = controller();
     const a = panel();

@@ -14,6 +14,10 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
     },
     alias: {
+      "@egon/modeler-shared": resolve(
+        __dirname,
+        "../../libs/modeler-shared/src/index.ts",
+      ),
       "@egon/modeler-types": resolve(
         __dirname,
         "../../libs/modeler-types/src/index.ts",

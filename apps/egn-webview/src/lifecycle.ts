@@ -1,5 +1,6 @@
 import {
   DisplayDomainStoryMessage,
+  createFlushResponder,
   HostToWebviewMessage,
   ReportWebviewIssueCommand,
   ResolveWebviewIssueCommand,
@@ -44,6 +45,7 @@ class StatusUi {
   private readonly spinner: HTMLDivElement;
   private readonly message: HTMLParagraphElement;
   private readonly action: HTMLButtonElement;
+  private interactionLocked = false;
 
   constructor(
     private readonly container: HTMLElement,
@@ -88,11 +90,22 @@ class StatusUi {
   }
 
   ready(): void {
-    this.container.inert = false;
-    this.container.classList.remove("egon-canvas-paused");
+    this.container.inert = this.interactionLocked;
+    this.container.classList.toggle("egon-canvas-paused", this.interactionLocked);
     this.overlay.hidden = true;
     this.spinner.hidden = true;
     this.action.hidden = true;
+  }
+
+  setInteractionLocked(locked: boolean): void {
+    this.interactionLocked = locked;
+    if (locked) {
+      this.container.inert = true;
+      this.container.classList.add("egon-canvas-paused");
+    } else if (this.overlay.hidden) {
+      this.container.inert = false;
+      this.container.classList.remove("egon-canvas-paused");
+    }
   }
 
   dispose(): void {
@@ -178,6 +191,42 @@ export function bootstrap(
       }
     },
   });
+
+  const flushResponder = createFlushResponder({
+    isReady: () => !disposed && client !== undefined && activeIssue === undefined,
+    hostUpdateVersion: () => displayGeneration,
+    hasPendingHostUpdate: () => importedGeneration !== latest?.generation || importInProgress,
+    beginDestructiveFlush: () => ui.setInteractionLocked(true),
+    endDestructiveFlush: () => ui.setInteractionLocked(false),
+    flush: flushSnapshot,
+  }, (reply) => host.postMessage(reply));
+
+  async function flushSnapshot(generation: number, exportWhenClean: boolean) {
+    if (!await synchronizer.drain() || !canExport(generation)) return { status: "unavailable" as const };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let exported: string | undefined;
+      await runOperation(async () => {
+        if (canExport(generation)) exported = exportAndValidate();
+      });
+      if (!exported || !canExport(generation)) return { status: "unavailable" as const };
+      if (exported === baseline) {
+        return exportWhenClean
+          ? { status: "flushed" as const, content: exported, documentRevision }
+          : { status: "clean" as const };
+      }
+      synchronizer.submit(currentWrite(exported, generation));
+      if (!await synchronizer.drain() || !canExport(generation)) return { status: "unavailable" as const };
+      let current: string | undefined;
+      await runOperation(async () => {
+        if (canExport(generation)) current = exportAndValidate();
+      });
+      if (!current || !canExport(generation)) return { status: "unavailable" as const };
+      if (current === exported && baseline === exported) {
+        return { status: "flushed" as const, content: exported, documentRevision };
+      }
+    }
+    return { status: "unavailable" as const };
+  }
 
   const onStoryChanged = (): void => {
     if (
@@ -316,6 +365,7 @@ export function bootstrap(
         return;
       case "FlushDocumentQuery":
       case "ReleaseDocumentFlushQuery":
+        await flushResponder(message);
         return;
     }
   }

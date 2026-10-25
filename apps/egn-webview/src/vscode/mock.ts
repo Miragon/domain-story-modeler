@@ -75,7 +75,7 @@ export class VsCodeMock extends MockHostApi<
         console.error(message.message, message.stack ?? "");
         break;
       case "DocumentFlushedCommand":
-        console.debug("[DEBUG] Reserved flush response", message);
+        console.debug("[DEBUG] Flush response", message);
         break;
     }
   }

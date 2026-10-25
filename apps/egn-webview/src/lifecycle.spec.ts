@@ -88,6 +88,102 @@ afterEach(() => {
 });
 
 describe("webview lifecycle", () => {
+  it("flushes a committed export before story.changed and waits for its acknowledgment", async () => {
+    const h = host();
+    const modeler = fakeClient();
+    const session = bootstrap(h.api, async () => modeler.client);
+    display();
+    await settleDisplay();
+    const changed = { ...story, domainStory: { ...story.domainStory, title: "immediate save" } };
+    vi.mocked(modeler.client.export).mockReturnValue(changed);
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "FlushDocumentQuery", token: 1, destructive: false, exportWhenClean: false,
+    } }));
+    await settleDisplay(0);
+    const write = h.posted.find((message) => message.type === "SyncDocumentCommand");
+    expect(write).toMatchObject({ text: JSON.stringify(changed) });
+    expect(h.posted.find((message) => message.type === "DocumentFlushedCommand")).toBeUndefined();
+    if (write?.type !== "SyncDocumentCommand") throw new Error("missing write");
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "SyncDocumentResultCommand", sessionId: "session", requestId: write.requestId,
+      documentRevision: 1, status: "applied",
+    } }));
+    await settleDisplay(0);
+    expect(h.posted).toContainEqual({
+      type: "DocumentFlushedCommand", token: 1, status: "flushed",
+      content: JSON.stringify(changed), documentRevision: 1,
+    });
+    session.dispose();
+  });
+
+  it("keeps a destructive lock until its token is released", async () => {
+    const h = host();
+    const modeler = fakeClient();
+    const session = bootstrap(h.api, async () => modeler.client);
+    display();
+    await settleDisplay();
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "FlushDocumentQuery", token: 4, destructive: true, exportWhenClean: false,
+    } }));
+    await settleDisplay(0);
+    expect(document.getElementById("egon-io-container")?.inert).toBe(true);
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "ReleaseDocumentFlushQuery", token: 3,
+    } }));
+    await settleDisplay(0);
+    expect(document.getElementById("egon-io-container")?.inert).toBe(true);
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "ReleaseDocumentFlushQuery", token: 4,
+    } }));
+    await settleDisplay(0);
+    expect(document.getElementById("egon-io-container")?.inert).toBe(false);
+    session.dispose();
+  });
+
+  it("returns unavailable after a failed acknowledgment without advancing the baseline", async () => {
+    const h = host();
+    const modeler = fakeClient();
+    const session = bootstrap(h.api, async () => modeler.client);
+    display();
+    await settleDisplay();
+    const changed = { ...story, domainStory: { ...story.domainStory, title: "not acknowledged" } };
+    vi.mocked(modeler.client.export).mockReturnValue(changed);
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "FlushDocumentQuery", token: 2, destructive: false, exportWhenClean: false,
+    } }));
+    await settleDisplay(0);
+    const write = h.posted.find((message) => message.type === "SyncDocumentCommand");
+    if (write?.type !== "SyncDocumentCommand") throw new Error("missing write");
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "SyncDocumentResultCommand", sessionId: "session", requestId: write.requestId,
+      documentRevision: 0, status: "failed",
+    } }));
+    await settleDisplay(0);
+    expect(h.posted).toContainEqual({ type: "DocumentFlushedCommand", token: 2, status: "unavailable" });
+    session.dispose();
+  });
+
+  it("reports a pending host display and treats normalized imports as clean", async () => {
+    const h = host();
+    const modeler = fakeClient();
+    const session = bootstrap(h.api, async () => modeler.client);
+    display(JSON.stringify(story, null, 2));
+    await settleDisplay();
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "FlushDocumentQuery", token: 3, destructive: false, exportWhenClean: false,
+    } }));
+    await settleDisplay(0);
+    expect(h.posted).toContainEqual({ type: "DocumentFlushedCommand", token: 3, status: "clean" });
+
+    display(JSON.stringify(story), 1);
+    window.dispatchEvent(new MessageEvent("message", { data: {
+      type: "FlushDocumentQuery", token: 4, destructive: false, exportWhenClean: false,
+    } }));
+    await settleDisplay(0);
+    expect(h.posted).toContainEqual({ type: "DocumentFlushedCommand", token: 4, status: "host-updated" });
+    session.dispose();
+  });
+
   it("listens before initialization and imports an immediate response", async () => {
     const h = host();
     const modeler = fakeClient();

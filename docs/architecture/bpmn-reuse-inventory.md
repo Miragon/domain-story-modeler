@@ -45,18 +45,25 @@ must be present; icon maps must contain string SVG values. Additional document
 fields pass through unchanged and `egon-core` remains authoritative for model
 semantics.
 
-The source flush contracts are reserved with numeric tokens, destructive/export
-flags, optional content/revision, and the four source statuses. No sender,
-responder, timeout, mutation lock, or save participant was ported. Production
-artifact tests load the minified extension and webview outputs, proving routing
-uses wire literals rather than preserved constructor/function names.
+The flush contracts retain numeric tokens, destructive/export flags, and the
+four source statuses. Operational `flushed` replies require validated EGN
+content and an acknowledged document revision. Production artifact tests load
+the minified extension and webview outputs, proving routing uses wire literals
+rather than preserved constructor/function names.
 
 ## Deliberate exclusions
 
 No BPMN/DMN models, participant framework, public API, feature-specific routing,
 deployment, or reference-repository source was copied.
-Operational document flushing remains deferred to issue #15. `egon-core` remains the independent webview
-renderer.
+`egon-core` remains the independent webview renderer.
+
+## Issue #15: save-time flushing
+
+The [pinned `DocumentFlushService.ts`](https://github.com/Miragon/bpmn-modeler/blob/08ea2c32ac05fdaeaab251229e56c5c0b2ae586b/libs/modeler-core/src/shared/service/DocumentFlushService.ts), [shared responder](https://github.com/Miragon/bpmn-modeler/blob/08ea2c32ac05fdaeaab251229e56c5c0b2ae586b/libs/shared/src/lib/documentFlush.ts), and [save participant](https://github.com/Miragon/bpmn-modeler/blob/08ea2c32ac05fdaeaab251229e56c5c0b2ae586b/apps/vscode-plugin/src/modeler/editor-session/DocumentSaveFlushController.ts) supplied token correlation, request coalescing, interaction locks, and synchronous `waitUntil` participation. EGN uses narrow session/transport ports and one URI-wide queue across panels. The host requests all current sessions concurrently under one 500 ms deadline, drains already-posted writes, then verifies live session identities and the document snapshot. Source edits and accepted sibling writes continue to win through the existing revision checks.
+
+The EGN responder compares a fresh, validated `EgonClient.export()` with the post-import or acknowledged baseline. It drains outstanding writes, submits changed exports through normal synchronization, and waits for the acknowledgment before reporting `flushed` with its revision. This keeps the normal path active if a flush reply is lost. Pending or intervening host displays prevent export. A destructive confirmed flush holds all participating canvases inert until the token-specific lease is released. `withConfirmedFlush` is the transformation callback boundary for #16; icon discovery and buffer transformation remain there.
+
+Regression suites cover the host request service, responder, delayed `story.changed` export, queue draining, source updates, save registration, lease release, real-client Chromium flush, and minified artifact routing.
 
 ## Issue #13: document identity and synchronization
 

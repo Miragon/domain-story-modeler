@@ -214,8 +214,8 @@ describe("EGN envelope validation", () => {
   });
 });
 
-describe("reserved flush validation", () => {
-  it("accepts flushed content and an optional revision", () => {
+describe("flush validation", () => {
+  it("accepts flushed content with its acknowledged revision", () => {
     const response = {
       type: "DocumentFlushedCommand",
       token: 9,
@@ -228,6 +228,7 @@ describe("reserved flush validation", () => {
 
   it.each([
     [{ type: "DocumentFlushedCommand", token: 1, status: "flushed" }],
+    [{ type: "DocumentFlushedCommand", token: 1, status: "flushed", content: v4Story }],
     [
       {
         type: "DocumentFlushedCommand",

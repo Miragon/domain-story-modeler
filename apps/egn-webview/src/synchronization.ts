@@ -32,6 +32,8 @@ export class DocumentSynchronizer {
   private outstanding: OutstandingWrite | undefined;
   private pending: PendingWrite | undefined;
   private disposed = false;
+  private failureEpoch = 0;
+  private readonly waiters = new Set<() => void>();
 
   constructor(private readonly callbacks: SynchronizationCallbacks) {}
 
@@ -46,6 +48,27 @@ export class DocumentSynchronizer {
 
   invalidate(generation: number): void {
     if (this.pending?.generation !== generation) this.pending = undefined;
+    this.notifyWaiters();
+  }
+
+  /** Waits for all writes known at the time of the flush to be acknowledged. */
+  async drain(signal?: AbortSignal): Promise<boolean> {
+    if (this.disposed || signal?.aborted) return false;
+    const epoch = this.failureEpoch;
+    while (this.outstanding || this.pending) {
+      await new Promise<void>((resolve) => {
+        const done = (): void => {
+          this.waiters.delete(done);
+          signal?.removeEventListener("abort", done);
+          resolve();
+        };
+        this.waiters.add(done);
+        signal?.addEventListener("abort", done, { once: true });
+        if (this.disposed || signal?.aborted || (!this.outstanding && !this.pending)) done();
+      });
+      if (this.disposed || signal?.aborted || epoch !== this.failureEpoch) return false;
+    }
+    return true;
   }
 
   receive(result: SyncDocumentResultMessage): void {
@@ -60,6 +83,7 @@ export class DocumentSynchronizer {
 
     this.outstanding = undefined;
     if (result.status === "stale") {
+      this.failureEpoch++;
       const pending = this.pending;
       this.pending = undefined;
       if (this.callbacks.isCurrent(current)) {
@@ -67,15 +91,18 @@ export class DocumentSynchronizer {
       } else if (pending && this.callbacks.isCurrent(pending)) {
         this.publish(pending);
       }
+      this.notifyWaiters();
       return;
     }
     if (result.status === "failed") {
+      this.failureEpoch++;
       const pending = this.pending;
       this.pending = undefined;
       this.callbacks.failed(current);
       if (pending && this.callbacks.isCurrent(pending)) {
         this.publish(pending);
       }
+      this.notifyWaiters();
       return;
     }
 
@@ -95,12 +122,18 @@ export class DocumentSynchronizer {
         ),
       });
     }
+    this.notifyWaiters();
   }
 
   dispose(): void {
     this.disposed = true;
     this.outstanding = undefined;
     this.pending = undefined;
+    this.notifyWaiters();
+  }
+
+  private notifyWaiters(): void {
+    for (const waiter of [...this.waiters]) waiter();
   }
 
   private publish(write: PendingWrite): void {

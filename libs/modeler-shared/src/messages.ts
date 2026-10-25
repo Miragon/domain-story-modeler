@@ -80,7 +80,6 @@ export interface ErrorDiagnosticMessage {
   readonly stack?: string;
 }
 
-/** Reserved for the save-time flush implementation in issue #15. */
 export interface FlushDocumentRequest {
   readonly type: "FlushDocumentQuery";
   readonly token: number;
@@ -88,7 +87,6 @@ export interface FlushDocumentRequest {
   readonly exportWhenClean: boolean;
 }
 
-/** Reserved for the save-time flush implementation in issue #15. */
 export interface ReleaseDocumentFlushRequest {
   readonly type: "ReleaseDocumentFlushQuery";
   readonly token: number;
@@ -100,14 +98,13 @@ export type DocumentFlushStatus =
   | "host-updated"
   | "unavailable";
 
-/** Reserved webview -> host response for issue #15. */
-export interface DocumentFlushedResponse {
+export type DocumentFlushedResponse = {
   readonly type: "DocumentFlushedCommand";
   readonly token: number;
-  readonly status: DocumentFlushStatus;
-  readonly content?: string;
-  readonly documentRevision?: number;
-}
+} & (
+  | { readonly status: "flushed"; readonly content: string; readonly documentRevision: number }
+  | { readonly status: Exclude<DocumentFlushStatus, "flushed">; readonly content?: never; readonly documentRevision?: never }
+);
 
 export type WebviewToHostMessage =
   | InitializeWebviewMessage
