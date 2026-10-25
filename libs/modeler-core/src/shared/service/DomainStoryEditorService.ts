@@ -17,6 +17,8 @@ interface DocumentRecord {
     queue: Promise<void>;
     pending: number;
     syncHealthy: boolean;
+    open: boolean;
+    lifetime: number;
 }
 
 export type SyncStatus = "applied" | "unchanged" | "stale" | "failed";
@@ -31,8 +33,8 @@ export class DomainStoryEditorService {
 
     registerSession(id: string, text: string, version: number, view: ViewPort): string {
         let document = this.documents.get(id);
-        if (!document) {
-            document = { id, text, version, revision: 0, sessions: new Set(), guards: new Map(), queue: Promise.resolve(), pending: 0, syncHealthy: true };
+        if (!document || !document.open) {
+            document = this.createRecord(id, text, version);
             this.documents.set(id, document);
         } else if (version > document.version) {
             this.onDocumentChanged(id, text, version);
@@ -42,6 +44,79 @@ export class DomainStoryEditorService {
         document.sessions.add(session);
         this.sessions.set(sessionId, session);
         return sessionId;
+    }
+
+    registerOpenDocument(id: string, text: string, version: number): void {
+        const existing = this.documents.get(id);
+        if (existing?.open) {
+            this.onDocumentChanged(id, text, version);
+            return;
+        }
+        this.documents.set(id, this.createRecord(id, text, version));
+    }
+
+    closeDocument(id: string): void {
+        const doc = this.documents.get(id);
+        if (!doc) return;
+        doc.open = false;
+        doc.lifetime++;
+        this.collect(doc);
+    }
+
+    hasOpenDocument(id: string): boolean { return this.documents.get(id)?.open ?? false; }
+
+    documentState(id: string): { version: number; revision: number } | undefined {
+        const doc = this.documents.get(id);
+        return doc?.open ? { version: doc.version, revision: doc.revision } : undefined;
+    }
+
+    /** Runs a host edit in the same URI queue as panel writes. */
+    async transformOpenDocument(
+        id: string,
+        transform: (text: string) => string,
+        expected?: { version: number; revision: number; sessions: readonly string[] },
+    ): Promise<"applied" | "unchanged" | "stale"> {
+        const doc = this.documents.get(id);
+        if (!doc || !doc.open) return "stale";
+        const lifetime = doc.lifetime;
+        doc.pending++;
+        const run = async (): Promise<"applied" | "unchanged" | "stale"> => {
+            if (!doc.open || doc.lifetime !== lifetime || this.documents.get(id) !== doc || !this.matches(doc, expected)) return "stale";
+            const snapshot = await this.docs.read(id);
+            if (!doc.open || doc.lifetime !== lifetime || !this.matches(doc, expected) || snapshot.version !== doc.version) {
+                this.acceptSnapshot(doc, snapshot);
+                return "stale";
+            }
+            const text = transform(snapshot.text);
+            if (sameContent(snapshot.text, text)) return "unchanged";
+            const revision = doc.revision;
+            this.addGuard(doc, text);
+            try {
+                const result = await this.docs.write(id, text, snapshot.version,
+                    () => doc.open && doc.lifetime === lifetime && this.documents.get(id) === doc && doc.revision === revision && this.matches(doc, expected));
+                if (result.status === "stale" || !doc.open || doc.lifetime !== lifetime || doc.revision !== revision ||
+                    (expected && (expected.sessions.some((session) => !this.isCurrentSession(id, session)) || this.sessionIds(id).length !== expected.sessions.length))) {
+                    this.acceptSnapshot(doc, result.snapshot);
+                    return "stale";
+                }
+                doc.version = Math.max(doc.version, result.snapshot.version);
+                if (!sameContent(doc.text, result.snapshot.text)) {
+                    doc.text = result.snapshot.text;
+                    doc.revision++;
+                    this.publish(doc);
+                }
+                return result.status;
+            } finally { this.releaseGuard(doc, text); }
+        };
+        const result = doc.queue.then(run);
+        doc.queue = result.then(() => undefined, () => undefined).finally(() => { doc.pending--; this.collect(doc); });
+        return result;
+    }
+
+    private matches(doc: DocumentRecord, expected?: { version: number; revision: number; sessions: readonly string[] }): boolean {
+        return !expected || (doc.version === expected.version && doc.revision === expected.revision &&
+            expected.sessions.every((id) => this.isCurrentSession(doc.id, id)) &&
+            this.sessionIds(doc.id).length === expected.sessions.length);
     }
 
     async initialize(sessionId: string): Promise<void> {
@@ -61,16 +136,6 @@ export class DomainStoryEditorService {
             doc.text = text;
             return;
         }
-        doc.text = text;
-        doc.revision++;
-        doc.syncHealthy = true;
-        this.publish(doc);
-    }
-
-    /** Records an icon initialization write when the host has not emitted a text-document event yet. */
-    onInitializedContent(id: string, text: string): void {
-        const doc = this.documents.get(id);
-        if (!doc || sameContent(doc.text, text)) return;
         doc.text = text;
         doc.revision++;
         doc.syncHealthy = true;
@@ -139,7 +204,8 @@ export class DomainStoryEditorService {
 
     isCurrentSession(documentId: string, sessionId: string): boolean {
         const session = this.sessions.get(sessionId);
-        return !!session && !session.retired && session.document.id === documentId;
+        return !!session && !session.retired && session.document.id === documentId &&
+            session.document.open && this.documents.get(documentId) === session.document;
     }
 
     /** Drains writes already posted for this URI and reconciles external changes. */
@@ -155,7 +221,8 @@ export class DomainStoryEditorService {
     }
 
     private current(session: SessionRecord, revision: number): boolean {
-        return !session.retired && this.sessions.get(session.id) === session && session.document.revision === revision;
+        return !session.retired && session.document.open && this.documents.get(session.document.id) === session.document &&
+            this.sessions.get(session.id) === session && session.document.revision === revision;
     }
 
     private async finish(session: SessionRecord, requestId: number, status: SyncStatus): Promise<SyncStatus> {
@@ -209,7 +276,11 @@ export class DomainStoryEditorService {
     }
 
     private collect(doc: DocumentRecord): void {
-        if (!doc.sessions.size && !doc.pending && this.documents.get(doc.id) === doc) this.documents.delete(doc.id);
+        if (!doc.open && !doc.sessions.size && !doc.pending && this.documents.get(doc.id) === doc) this.documents.delete(doc.id);
+    }
+
+    private createRecord(id: string, text: string, version: number): DocumentRecord {
+        return { id, text, version, revision: 0, sessions: new Set(), guards: new Map(), queue: Promise.resolve(), pending: 0, syncHealthy: true, open: true, lifetime: 0 };
     }
 }
 

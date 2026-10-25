@@ -1,4 +1,4 @@
-import { window, workspace } from "vscode";
+import { window } from "vscode";
 import { LoggerPort } from "@egon/modeler-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IconWatcherController } from "./IconWatcherController";
@@ -45,23 +45,16 @@ describe("extension registrations", () => {
         expect(controllerDispose).toHaveBeenCalledOnce();
     });
 
-    it("owns every watcher subscription and the watcher exactly once", () => {
-        const disposals = Array.from({ length: 4 }, () => vi.fn());
-        const watcher = {
-            dispose: disposals[0],
-            onDidCreate: vi.fn(() => ({ dispose: disposals[1] })),
-            onDidChange: vi.fn(() => ({ dispose: disposals[2] })),
-            onDidDelete: vi.fn(() => ({ dispose: disposals[3] })),
-        };
-        vi.mocked(workspace.createFileSystemWatcher).mockReturnValue(watcher as never);
-
+    it("delegates watcher resources to the controller scope", () => {
+        const dispose = vi.fn();
+        const register = vi.fn((scope) => scope.add({ dispose }));
         const registration = registerIconWatcher(
-            { handle: vi.fn() } as unknown as IconWatcherController,
+            { register } as unknown as IconWatcherController,
             logger,
         );
         registration.dispose();
         registration.dispose();
-
-        for (const dispose of disposals) expect(dispose).toHaveBeenCalledOnce();
+        expect(register).toHaveBeenCalledOnce();
+        expect(dispose).toHaveBeenCalledOnce();
     });
 });

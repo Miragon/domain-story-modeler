@@ -1,5 +1,5 @@
-import { DisposalScope, ICON_BASE_PATH, LoggerPort } from "@egon/modeler-core";
-import { window, workspace } from "vscode";
+import { DisposalScope, LoggerPort } from "@egon/modeler-core";
+import { window } from "vscode";
 import { IconWatcherController } from "./IconWatcherController";
 import { WebviewController } from "./WebviewController";
 
@@ -31,24 +31,7 @@ export function registerIconWatcher(
     );
 
     try {
-        const watcher = scope.add(
-            workspace.createFileSystemWatcher(`**/${ICON_BASE_PATH}/**/*.svg`),
-        );
-        scope.add(
-            watcher.onDidCreate((uri) => {
-                void controller.handle(uri.toString(), "create", scope);
-            }),
-        );
-        scope.add(
-            watcher.onDidChange((uri) => {
-                void controller.handle(uri.toString(), "update", scope);
-            }),
-        );
-        scope.add(
-            watcher.onDidDelete((uri) => {
-                void controller.handle(uri.toString(), "delete", scope);
-            }),
-        );
+        controller.register(scope);
         return scope;
     } catch (error) {
         scope.dispose();

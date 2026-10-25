@@ -11,6 +11,7 @@
     "dev": "vite build --watch"
   },
   "dependencies": {
+    "@egon/modeler-shared": "workspace:*",
     "@egon/modeler-types": "workspace:*"
   }
 }

@@ -2,7 +2,6 @@ import type { TextDocument, WebviewPanel } from "vscode";
 import { workspace } from "vscode";
 import {
   DomainStoryEditorService,
-  IconService,
   LoggerPort,
   NotifierPort,
   ViewPort,
@@ -69,7 +68,6 @@ describe("WebviewController", () => {
   let app: DomainStoryEditorService;
   let logger: LoggerPort;
   let notifier: NotifierPort;
-  let icons: IconService;
   let displays: ReturnType<typeof vi.fn>;
   let results: ReturnType<typeof vi.fn>;
   let interaction: WebviewInteractionPort;
@@ -85,11 +83,6 @@ describe("WebviewController", () => {
     app = new DomainStoryEditorService({ read: vi.fn(), write: vi.fn() });
     logger = { debug: vi.fn(), error: vi.fn() };
     notifier = { warning: vi.fn(), error: vi.fn() };
-    icons = {
-      initializeDocument: vi.fn(async (_id, current: () => string) =>
-        current(),
-      ),
-    } as unknown as IconService;
     displays = vi.fn(async () => undefined);
     results = vi.fn(async () => undefined);
     interaction = {
@@ -103,7 +96,6 @@ describe("WebviewController", () => {
       extensionUri: { path: "/extension" } as never,
       extensionId: "egn",
       app,
-      icons,
       logger,
       notifier,
       interaction,
@@ -113,10 +105,10 @@ describe("WebviewController", () => {
     });
   }
 
-  it("tracks host changes during asynchronous icon initialization and delivers the latest snapshot", async () => {
-    const hold = deferred<string>();
-    vi.mocked(icons.initializeDocument).mockReturnValueOnce(hold.promise);
+  it("tracks host changes during asynchronous icon refresh and delivers the latest snapshot", async () => {
+    const hold = deferred<void>();
     const c = controller();
+    c.setIconRefresh(() => hold.promise);
     const p = panel();
     const opening = c.resolveCustomTextEditor(document(), p.panel);
     hostChange({
@@ -128,23 +120,23 @@ describe("WebviewController", () => {
       } as TextDocument,
     });
     p.messages[0]({ type: "InitializeWebviewCommand" });
-    hold.resolve(story);
+    hold.resolve();
     await opening;
     expect(displays).toHaveBeenCalledWith("session-1", "latest", 1);
     c.dispose();
   });
 
   it("routes flush replies immediately while startup messages are buffered", async () => {
-    const hold = deferred<string>();
-    vi.mocked(icons.initializeDocument).mockReturnValueOnce(hold.promise);
+    const hold = deferred<void>();
     const c = controller();
+    c.setIconRefresh(() => hold.promise);
     const p = panel();
     const opening = c.resolveCustomTextEditor(document(), p.panel);
     const pending = c.flushService.requestFlush("session-1");
     expect(p.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "FlushDocumentQuery", token: 1 }));
     p.messages[0]({ type: "DocumentFlushedCommand", token: 1, status: "clean" });
     await expect(pending).resolves.toEqual({ status: "clean" });
-    hold.resolve(story);
+    hold.resolve();
     await opening;
     c.dispose();
   });
@@ -194,11 +186,17 @@ describe("WebviewController", () => {
     c.dispose();
   });
 
-  it("skips icon initialization for read-only documents", async () => {
-    vi.mocked(workspace.fs.isWritableFileSystem).mockReturnValue(false);
+  it("holds an uninitialized panel while an icon transform is in progress", async () => {
     const c = controller();
-    await c.resolveCustomTextEditor(document(), panel().panel);
-    expect(icons.initializeDocument).not.toHaveBeenCalled();
+    const p = panel();
+    await c.resolveCustomTextEditor(document(), p.panel);
+    const release = c.blockStartup("file:///story.egn");
+    p.messages[0]({ type: "InitializeWebviewCommand" });
+    expect(c.readySessionIds("file:///story.egn")).toEqual([]);
+    expect(displays).not.toHaveBeenCalled();
+    release();
+    await vi.waitFor(() => expect(displays).toHaveBeenCalled());
+    expect(c.readySessionIds("file:///story.egn")).toEqual(["session-1"]);
     c.dispose();
   });
 

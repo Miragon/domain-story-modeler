@@ -35,6 +35,61 @@ function fixture() {
 }
 
 describe("DomainStoryEditorService", () => {
+    it("queues host transforms after panel writes and publishes to every panel", async () => {
+        const f = fixture();
+        const a = f.open();
+        const b = f.open();
+        const writing = f.service.syncFromWebview(a, "panel", 0, 1);
+        const transforming = f.service.transformOpenDocument("file:///story.egn", (text) => `${text}+icon`);
+        expect(await writing).toBe("applied");
+        expect(await transforming).toBe("applied");
+        expect(f.texts.get("file:///story.egn")?.text).toBe("panel+icon");
+        expect(f.displays).toContainEqual([a, "panel+icon", 2]);
+        expect(f.displays).toContainEqual([b, "panel+icon", 2]);
+    });
+
+    it("drops a transform when its flush version becomes stale", async () => {
+        const f = fixture();
+        const a = f.open();
+        const state = f.service.documentState("file:///story.egn")!;
+        f.service.onDocumentChanged("file:///story.egn", "source", 2);
+        f.texts.set("file:///story.egn", { text: "source", version: 2 });
+        expect(await f.service.transformOpenDocument("file:///story.egn", () => "icon", { ...state, sessions: [a] })).toBe("stale");
+        expect(f.docs.write).not.toHaveBeenCalled();
+    });
+
+    it("accepts its own host echo while retaining a confirmed flush lease", async () => {
+        const f = fixture();
+        const a = f.open();
+        const expected = { ...f.service.documentState("file:///story.egn")!, sessions: [a] };
+        vi.mocked(f.docs.write).mockImplementationOnce(async (id, text, version) => {
+            const snapshot = { text, version: version + 1 };
+            f.texts.set(id, snapshot);
+            f.service.onDocumentChanged(id, text, snapshot.version);
+            return { status: "applied", snapshot };
+        });
+        expect(await f.service.transformOpenDocument("file:///story.egn", () => "icon", expected)).toBe("applied");
+        expect(f.displays).toContainEqual([a, "icon", 1]);
+    });
+
+    it("does not reuse a transform across close and reopen of the same URI", async () => {
+        const f = fixture();
+        const a = f.open();
+        const hold = deferred<void>();
+        vi.mocked(f.docs.read).mockImplementationOnce(async (id) => {
+            await hold.promise;
+            return f.texts.get(id)!;
+        });
+        const pending = f.service.transformOpenDocument("file:///story.egn", () => "old icon");
+        await Promise.resolve();
+        f.service.closeDocument("file:///story.egn");
+        f.service.dispose(a);
+        f.service.registerOpenDocument("file:///story.egn", "new", 2);
+        f.texts.set("file:///story.egn", { text: "new", version: 2 });
+        hold.resolve();
+        expect(await pending).toBe("stale");
+        expect(f.docs.write).not.toHaveBeenCalled();
+    });
     it("drains a posted write before confirming a clean flush", async () => {
         const f = fixture();
         const session = f.open();
@@ -195,17 +250,6 @@ describe("DomainStoryEditorService", () => {
         expect(f.displays).toContainEqual([b, "host", 1]);
         expect(f.displays).toContainEqual([c, "host", 1]);
         expect(a).not.toBe(b);
-    });
-
-    it("records initialization content once without inventing a host version", async () => {
-        const f = fixture();
-        const a = f.open();
-        const b = f.open();
-        f.service.onInitializedContent("file:///story.egn", "icons");
-        f.service.onInitializedContent("file:///story.egn", "icons");
-        await f.service.initialize(a);
-        expect(f.displays.at(-1)).toEqual([a, "icons", 1]);
-        expect(f.displays.filter(([id]) => id === b)).toHaveLength(1);
     });
 
     it("publishes text-editor edits and undo/redo snapshots to both panels", async () => {

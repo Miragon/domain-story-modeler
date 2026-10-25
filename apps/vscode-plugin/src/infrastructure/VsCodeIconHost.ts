@@ -1,48 +1,33 @@
-import { FilePermission, RelativePattern, Uri, workspace } from "vscode";
-import {
-    FileDiscoveryPort,
-    FileReadPort,
-    FileWritePort,
-    TextDocumentReadPort,
-    WorkspaceFolderPort,
-} from "@egon/modeler-core";
+import { FileType, Uri, workspace } from "vscode";
+import { IconDirectoryPort, FileReadPort, WorkspaceFolderPort } from "@egon/modeler-core";
 
-/** VS Code adapters used by the host-independent icon service. */
-export class VsCodeIconHost
-    implements
-        WorkspaceFolderPort,
-        FileDiscoveryPort,
-        FileReadPort,
-        FileWritePort,
-        TextDocumentReadPort
-{
+/** Filesystem discovery for open-buffer icon synchronization. */
+export class VsCodeIconHost implements WorkspaceFolderPort, IconDirectoryPort, FileReadPort {
     getWorkspaceFolder(resourceId: string): string | undefined {
         return workspace.getWorkspaceFolder(toUri(resourceId))?.uri.toString();
     }
 
-    async findFiles(workspaceFolderId: string, pattern: string): Promise<string[]> {
-        const files = await workspace.findFiles(
-            new RelativePattern(toUri(workspaceFolderId), pattern),
-        );
-        return files.map((uri) => uri.toString());
+    async readDirectory(directoryId: string): Promise<readonly { name: string; kind: "file" | "directory" }[]> {
+        try {
+            const entries = await workspace.fs.readDirectory(toUri(directoryId));
+            return entries.filter(([, type]) => !!(type & (FileType.File | FileType.Directory)))
+                .map(([name, type]) => ({ name, kind: type & FileType.Directory ? "directory" as const : "file" as const }));
+        } catch (error) {
+            if (error instanceof Error && /FileNotFound|EntryNotFound|ENOENT/.test(`${error.name} ${error.message}`)) return [];
+            throw error;
+        }
+    }
+
+    joinPath(directoryId: string, name: string): string {
+        return Uri.joinPath(toUri(directoryId), ...name.split("/")).toString();
+    }
+
+    parentPath(resourceId: string): string {
+        return Uri.joinPath(toUri(resourceId).with({ query: "", fragment: "" }), "..").toString();
     }
 
     async readFile(resourceId: string): Promise<string> {
-        const data = await workspace.fs.readFile(toUri(resourceId));
-        return new TextDecoder().decode(data);
-    }
-
-    async readTextDocument(resourceId: string): Promise<string> {
-        const document = await workspace.openTextDocument(toUri(resourceId));
-        return document.getText();
-    }
-
-    async writeFile(resourceId: string, text: string): Promise<void> {
-        const uri = toUri(resourceId);
-        if (workspace.fs.isWritableFileSystem(uri.scheme) !== true) throw new Error(`Document is not writable: ${resourceId}`);
-        const stat = await workspace.fs.stat(uri);
-        if ((stat.permissions ?? 0) & FilePermission.Readonly) throw new Error(`Document is read-only: ${resourceId}`);
-        await workspace.fs.writeFile(uri, new TextEncoder().encode(text));
+        return new TextDecoder().decode(await workspace.fs.readFile(toUri(resourceId)));
     }
 }
 

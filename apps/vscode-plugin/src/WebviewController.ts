@@ -1,6 +1,5 @@
 import {
   CustomTextEditorProvider,
-  FilePermission,
   TextDocument,
   Uri,
   WebviewPanel,
@@ -10,8 +9,6 @@ import {
   DisposalScope,
   DomainStoryEditorService,
   DocumentFlushService,
-  IconInitializationError,
-  IconService,
   LoggerPort,
   NotifierPort,
   ViewPort,
@@ -32,6 +29,8 @@ interface EditorLifetime {
   readonly sessionId: string;
   readonly documentId: string;
   phase: EditorPhase;
+  initialized: boolean;
+  startupScheduled: boolean;
   latestDocumentText: string;
   latestHostVersion: number;
   pendingMessages: WebviewToHostMessage[];
@@ -46,7 +45,6 @@ export interface WebviewControllerDependencies {
   extensionUri: Uri;
   extensionId: string;
   app: DomainStoryEditorService;
-  icons: IconService;
   logger: LoggerPort;
   notifier: NotifierPort;
   interaction: WebviewInteractionPort;
@@ -64,6 +62,8 @@ export class WebviewController implements CustomTextEditorProvider {
   >;
   private readonly renderUi: typeof domainStoryEditorUi;
   private disposed = false;
+  private refreshIcons?: (documentId: string) => Promise<void>;
+  private readonly startupLocks = new Map<string, { count: number; promise: Promise<void>; release: () => void }>();
   readonly flushService: DocumentFlushService;
 
   constructor(private readonly dependencies: WebviewControllerDependencies) {
@@ -98,6 +98,8 @@ export class WebviewController implements CustomTextEditorProvider {
     >()
       .on("InitializeWebviewCommand", async (_message, sessionId) => {
         await this.dependencies.app.initialize(sessionId);
+        const lifetime = [...this.panels.values()].find((entry) => entry.sessionId === sessionId);
+        if (lifetime && !lifetime.scope.isRetired) lifetime.initialized = true;
       })
       .on("SyncDocumentCommand", async (message, sessionId) => {
         if (message.sessionId !== sessionId)
@@ -146,6 +148,27 @@ export class WebviewController implements CustomTextEditorProvider {
       );
   }
 
+  readySessionIds(documentId: string): string[] {
+    return [...this.panels.values()].filter((entry) => entry.documentId === documentId &&
+      (entry.phase === "ready" || entry.phase === "flushing") && entry.initialized && !entry.scope.isRetired)
+      .map((entry) => entry.sessionId);
+  }
+
+  setIconRefresh(refresh: (documentId: string) => Promise<void>): void { this.refreshIcons = refresh; }
+
+  blockStartup(documentId: string): () => void {
+    const existing = this.startupLocks.get(documentId);
+    if (existing) { existing.count++; return existing.release; }
+    let done!: () => void;
+    const promise = new Promise<void>((resolve) => { done = resolve; });
+    const lock = { count: 1, promise, release: () => {
+      lock.count--;
+      if (lock.count === 0) { this.startupLocks.delete(documentId); done(); }
+    } };
+    this.startupLocks.set(documentId, lock);
+    return lock.release;
+  }
+
   async resolveCustomTextEditor(
     document: TextDocument,
     panel: WebviewPanel,
@@ -169,6 +192,8 @@ export class WebviewController implements CustomTextEditorProvider {
       ),
       documentId,
       phase: "loading",
+      initialized: false,
+      startupScheduled: false,
       latestDocumentText: document.getText(),
       latestHostVersion: document.version,
       pendingMessages: [],
@@ -193,7 +218,7 @@ export class WebviewController implements CustomTextEditorProvider {
         panel.webview,
         this.dependencies.extensionUri,
       );
-      await this.initializeIcons(document, lifetime);
+      await this.refreshIcons?.(documentId);
       if (lifetime.scope.isRetired) return;
       await this.flushPendingMessages(lifetime);
     } catch (error) {
@@ -216,51 +241,6 @@ export class WebviewController implements CustomTextEditorProvider {
     this.scope.dispose();
   }
 
-  private async initializeIcons(
-    document: TextDocument,
-    lifetime: EditorLifetime,
-  ): Promise<void> {
-    try {
-      if (workspace.fs.isWritableFileSystem(document.uri.scheme) !== true)
-        return;
-      const stat = await workspace.fs.stat(document.uri);
-      if (stat && (stat.permissions ?? 0) & FilePermission.Readonly) return;
-      const sourceVersion = lifetime.latestHostVersion;
-      const initialized = await this.dependencies.icons.initializeDocument(
-        document.uri.toString(),
-        () => lifetime.latestDocumentText,
-        lifetime.scope,
-      );
-      if (
-        initialized !== undefined &&
-        !lifetime.scope.isRetired &&
-        lifetime.latestHostVersion === sourceVersion &&
-        initialized !== lifetime.latestDocumentText
-      ) {
-        lifetime.latestDocumentText = initialized;
-        this.dependencies.app.onInitializedContent(
-          lifetime.documentId,
-          initialized,
-        );
-      }
-    } catch (error) {
-      if (lifetime.scope.isRetired) return;
-      this.dependencies.logger.error(
-        "Failed to initialize custom icons",
-        error,
-      );
-      if (error instanceof IconInitializationError && error.stage === "write") {
-        this.dependencies.notifier.error(
-          "Custom icons could not be saved. The editor opened with the current document icons.",
-        );
-      } else {
-        this.dependencies.notifier.warning(
-          "Custom icons could not be loaded. The editor opened with the icons embedded in the document.",
-        );
-      }
-    }
-  }
-
   private receiveMessage(lifetime: EditorLifetime, input: unknown): void {
     if (lifetime.scope.isRetired) return;
     let message: WebviewToHostMessage;
@@ -278,6 +258,18 @@ export class WebviewController implements CustomTextEditorProvider {
       lifetime.pendingMessages.push(message);
       return;
     }
+    const lock = this.startupLocks.get(lifetime.documentId);
+    if (lock && !lifetime.initialized && message.type !== "DocumentFlushedCommand") {
+      lifetime.pendingMessages.push(message);
+      if (!lifetime.startupScheduled) {
+        lifetime.startupScheduled = true;
+        void lock.promise.then(async () => {
+          lifetime.startupScheduled = false;
+          if (!lifetime.scope.isRetired) await this.flushPendingMessages(lifetime);
+        }).catch((error) => this.reportAsyncFailure("Failed to resume the editor", error));
+      }
+      return;
+    }
     if (message.type === "DocumentFlushedCommand") {
       this.flushService.handleReply(lifetime.sessionId, message);
       return;
@@ -291,6 +283,7 @@ export class WebviewController implements CustomTextEditorProvider {
   private async flushPendingMessages(lifetime: EditorLifetime): Promise<void> {
     lifetime.phase = "flushing";
     while (!lifetime.scope.isRetired && lifetime.pendingMessages.length) {
+      await this.startupLocks.get(lifetime.documentId)?.promise;
       const message = lifetime.pendingMessages.shift();
       if (!message) continue;
       try {
@@ -300,6 +293,7 @@ export class WebviewController implements CustomTextEditorProvider {
           this.reportAsyncFailure("Failed to process a webview message", error);
       }
     }
+    await this.startupLocks.get(lifetime.documentId)?.promise;
     if (!lifetime.scope.isRetired) lifetime.phase = "ready";
   }
 
