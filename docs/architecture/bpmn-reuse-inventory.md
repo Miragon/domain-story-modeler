@@ -77,6 +77,29 @@ No BPMN/DMN models, participant framework, public API, feature-specific routing,
 deployment, or reference-repository source was copied.
 `egon-core` remains the independent webview renderer.
 
+## Issue #17: executable architecture and packaged editor
+
+The immutable [BPMN architecture guard](https://github.com/Miragon/bpmn-modeler/blob/08ea2c32ac05fdaeaab251229e56c5c0b2ae586b/libs/modeler-core/src/architecture.spec.ts)
+at commit `08ea2c32ac05fdaeaab251229e56c5c0b2ae586b` is the source for the
+workspace boundary regressions. Its source-to-destination mapping is:
+
+| Pinned BPMN source | EGN destination | Adaptation |
+| --- | --- | --- |
+| `libs/modeler-core/src/architecture.spec.ts` | `libs/modeler-core/src/architecture.spec.ts` | One suite checks all five EGN workspaces and asserts real resolved edges. |
+| Relative import discovery and layer assertions in that spec | `test/architecture/importGraph.ts` | TypeScript resolves aliases, package entrypoints, barrels, type imports, side-effect imports, literal dynamic imports, and `require`. |
+| Architecture regression examples in that spec | Fixture cases in `architecture.spec.ts` | Violations cover workspace direction, deep and relative crossings, host imports, runtime DI, layers, unresolved imports, alias/barrel transitives, and cycles. |
+
+The EGN analyzer excludes tests, fixtures, declarations, dependencies, and
+generated output from production discovery. It rejects unresolved internal
+imports and verifies both direct and transitive host isolation. The BPMN
+participant framework, its feature names, deployment code, and renderer
+boundaries were not ported.
+
+The packaged regression harness lives in `test/extension`: a separate driver
+extension runs VS Code API assertions against an installed VSIX, while
+Playwright connects to the real webview. `test/package` checks the source
+manifest and packaged archive. No integration hook is shipped in the product.
+
 ## Issue #15: save-time flushing
 
 The [pinned `DocumentFlushService.ts`](https://github.com/Miragon/bpmn-modeler/blob/08ea2c32ac05fdaeaab251229e56c5c0b2ae586b/libs/modeler-core/src/shared/service/DocumentFlushService.ts), [shared responder](https://github.com/Miragon/bpmn-modeler/blob/08ea2c32ac05fdaeaab251229e56c5c0b2ae586b/libs/shared/src/lib/documentFlush.ts), and [save participant](https://github.com/Miragon/bpmn-modeler/blob/08ea2c32ac05fdaeaab251229e56c5c0b2ae586b/apps/vscode-plugin/src/modeler/editor-session/DocumentSaveFlushController.ts) supplied token correlation, request coalescing, interaction locks, and synchronous `waitUntil` participation. EGN uses narrow session/transport ports and one URI-wide queue across panels. The host requests all current sessions concurrently under one 500 ms deadline, drains already-posted writes, then verifies live session identities and the document snapshot. Source edits and accepted sibling writes continue to win through the existing revision checks.

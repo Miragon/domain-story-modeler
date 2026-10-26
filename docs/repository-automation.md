@@ -23,14 +23,19 @@ Before opening a pull request, run:
 yarn typecheck
 yarn lint
 yarn test
+yarn test:browser
 yarn build
+yarn test:artifacts
+yarn package
+yarn test:package
+yarn test:extension
 yarn npm audit --all --severity high
 yarn npm audit --all --recursive --severity critical
 ```
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs for pull requests, pushes to `main`, merge queues, and manual dispatches. It checks linting, the Vitest suite, the complete build, exact dependency pins, changed dependencies on pull requests, and high/critical dependency advisories.
+`.github/workflows/ci.yml` runs for pull requests, pushes to `main`, merge queues, and manual dispatches. It checks linting, production and test typechecking, Vitest, Chromium, the clean build, minified artifacts, VSIX contracts, and the installed extension on Linux under Xvfb. It also checks exact dependency pins, changed dependencies on pull requests, and high/critical dependency advisories. The extension job uploads its tested VSIX and failure diagnostics.
 
 Branch protection should require the aggregate `ci` job. It succeeds only when every required job succeeds; the dependency-review job may be skipped only outside pull requests. Also require `Validate Conventional Commit title`.
 
@@ -69,5 +74,10 @@ The release workflow runs on pushes to `main` and can also be dispatched manuall
 5. Merge a real `fix:` or `feat:` pull request. Review and merge the generated release pull request, then confirm that the root and extension versions agree and that the tag, changelog, and GitHub release were created.
 
 ## Troubleshooting
+
+The root resolution pins `@azure/msal-node` to `7.1.0` to fix
+[GHSA-xcx6-jx8p-x3h5](https://github.com/advisories/GHSA-xcx6-jx8p-x3h5)
+in the `@vscode/vsce` → `@azure/identity` packaging dependency chain. Remove
+the override once the upstream dependency range requires a patched release.
 
 If an immutable install fails, run `yarn install` with the pinned toolchain, review the manifest and lockfile changes, and commit both. If Release Please cannot create or update its pull request, first check the App installation scope and the two Actions credentials. If a dependency audit fails, update the affected direct dependency or resolution rather than lowering the audit threshold.

@@ -5,7 +5,5 @@ export * from "./shared/domain/hostPorts";
 export * from "./shared/service/DomainStoryEditorService";
 export * from "./shared/service/DocumentFlushService";
 export * from "./shared/infrastructure/WebviewMessageRouter";
-export * from "./story/domain/StoryIcons";
-export * from "./story/infrastructure/StorySerialization";
 export * from "./icons/domain";
 export * from "./icons/service";

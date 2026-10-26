@@ -8,11 +8,11 @@ const notifier: NotifierPort = { warning: vi.fn(), error: vi.fn() };
 const iconHost: IconHostPorts = {
     workspaceFolders: { getWorkspaceFolder: () => undefined },
     files: {
-        findFiles: vi.fn(),
+        parentPath: vi.fn(),
+        joinPath: vi.fn(),
+        readDirectory: vi.fn(),
         readFile: vi.fn(),
-        writeFile: vi.fn(),
     },
-    textDocuments: { readTextDocument: vi.fn() },
 };
 
 function context(): ExtensionContext {

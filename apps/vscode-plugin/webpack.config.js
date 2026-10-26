@@ -91,7 +91,7 @@ module.exports = (env, argv) => {
                         },
                     },
                     {
-                        from: "vscodeignore",
+                        from: ".vscodeignore",
                         to: ".",
                     },
                     {

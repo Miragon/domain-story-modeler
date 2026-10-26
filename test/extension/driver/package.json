@@ -1,0 +1,9 @@
+{
+  "name": "egon-integration-driver",
+  "version": "0.0.0",
+  "private": true,
+  "publisher": "egon-tests",
+  "engines": { "vscode": "^1.76.0" },
+  "main": "index.cjs",
+  "activationEvents": ["onStartupFinished"]
+}

@@ -89,17 +89,27 @@ export class ViewportStateManager {
   start(): () => void {
     const onViewport = (viewport: ViewportState): void =>
       this.persist(viewport);
+    const captureLatest = (): void => {
+      const viewport = this.capture();
+      if (viewport) this.persist(viewport);
+    };
     const onVisibility = (): void => {
       if (this.page.visibilityState === "hidden") {
-        const viewport = this.capture();
-        if (viewport) this.persist(viewport);
+        captureLatest();
       }
     };
+    const onNavigation = (): void => queueMicrotask(captureLatest);
     this.client.on("viewport.changed", onViewport);
     this.page.addEventListener("visibilitychange", onVisibility);
+    this.page.defaultView?.addEventListener("blur", captureLatest);
+    this.container.addEventListener("wheel", onNavigation, { passive: true });
+    this.container.addEventListener("pointerup", onNavigation);
     return () => {
       this.client.off("viewport.changed", onViewport);
       this.page.removeEventListener("visibilitychange", onVisibility);
+      this.page.defaultView?.removeEventListener("blur", captureLatest);
+      this.container.removeEventListener("wheel", onNavigation);
+      this.container.removeEventListener("pointerup", onNavigation);
     };
   }
 

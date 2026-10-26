@@ -138,6 +138,8 @@ describe("viewport state", () => {
 
     document.dispatchEvent(new Event("visibilitychange"));
     expect(state.viewbox).toEqual(first);
+    window.dispatchEvent(new Event("blur"));
+    expect(state.viewbox).toEqual(latest);
     stop();
     manager.dispose();
     expect(state.viewbox).toEqual(latest);
@@ -146,5 +148,28 @@ describe("viewport state", () => {
       expect.any(Function),
     );
     visibility.mockRestore();
+  });
+
+  it("persists wheel navigation before a webview is hidden", async () => {
+    let state: WebviewState = { editorId: "session", viewbox: undefined };
+    const viewport = { x: 12, y: 18, width: 420, height: 300 };
+    const host = {
+      getState: () => state,
+      setState: vi.fn((next: WebviewState) => (state = next)),
+      postMessage: vi.fn(),
+    } as unknown as WebviewHost;
+    const client = {
+      getViewport: vi.fn().mockReturnValue(viewport),
+      on: vi.fn(),
+      off: vi.fn(),
+    } as unknown as ModelerClient;
+    const container = document.createElement("div");
+    const manager = new ViewportStateManager(host, client, container, document);
+    const stop = manager.start();
+    container.dispatchEvent(new Event("wheel"));
+    await Promise.resolve();
+    expect(state.viewbox).toEqual(viewport);
+    stop();
+    manager.dispose();
   });
 });
