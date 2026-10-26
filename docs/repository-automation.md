@@ -75,4 +75,9 @@ The release workflow runs on pushes to `main` and can also be dispatched manuall
 
 ## Troubleshooting
 
+The root resolution pins `@azure/msal-node` to `7.1.0` to fix
+[GHSA-xcx6-jx8p-x3h5](https://github.com/advisories/GHSA-xcx6-jx8p-x3h5)
+in the `@vscode/vsce` → `@azure/identity` packaging dependency chain. Remove
+the override once the upstream dependency range requires a patched release.
+
 If an immutable install fails, run `yarn install` with the pinned toolchain, review the manifest and lockfile changes, and commit both. If Release Please cannot create or update its pull request, first check the App installation scope and the two Actions credentials. If a dependency audit fails, update the affected direct dependency or resolution rather than lowering the audit threshold.
