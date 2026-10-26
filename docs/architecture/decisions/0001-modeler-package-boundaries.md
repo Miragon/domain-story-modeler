@@ -41,3 +41,14 @@ workspace entrypoint so app builds do not require prebuilt `dist/libs` output.
 The core can be reused by another host, browser bundles cannot pull in VS Code
 adapters through its barrel, and default EGN data has one owner. Protocol and
 composition redesigns remain separate follow-up work.
+
+## Enforcement (issue #17)
+
+`test/architecture/importGraph.ts` builds a production import graph with the
+repository TypeScript aliases. Its regression suite checks direct and transitive
+host imports, unresolved local imports, named entrypoints, dependency direction,
+file cycles, and domain/service layering. This also applies to new domain or
+service code under the VS Code plugin. Tests and generated output are excluded
+from production discovery. The plan adapts the pinned BPMN architecture guard
+by resolving aliases and re-exports rather than inspecting relative imports
+alone.

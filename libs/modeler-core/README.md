@@ -1,7 +1,7 @@
 # `@egon/modeler-core`
 
 Host-independent Domain Story Modeler behavior. The package is split by feature
-(`shared`, `story`, and `icons`) and uses `domain`, `service`, and
+(`shared` and `icons`) and uses `domain`, `service`, and
 `infrastructure` folders only where those layers exist.
 
 Host capabilities are expressed as narrow editor, workspace, discovery,

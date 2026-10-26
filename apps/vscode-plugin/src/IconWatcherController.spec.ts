@@ -1,6 +1,6 @@
 import { createEmptyStory } from "@egon/modeler-types";
 import { DisposalScope, DomainStoryEditorService, IconService, LoggerPort, NotifierPort } from "@egon/modeler-core";
-import { TextDocument, workspace } from "vscode";
+import { TextDocument, WorkspaceFolder, workspace } from "vscode";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IconWatcherController } from "./IconWatcherController";
 import { DocumentSaveFlushController } from "./DocumentSaveFlushController";
@@ -17,7 +17,7 @@ function fixture() {
         get version() { return version; },
         getText: () => content,
     } as TextDocument;
-    vi.mocked(workspace.textDocuments).splice(0, Infinity, document);
+    (workspace.textDocuments as TextDocument[]).splice(0, Infinity, document);
     const app = new DomainStoryEditorService({
         read: async () => ({ text: content, version }),
         write: async (_id, text, expected, current) => {
@@ -55,8 +55,8 @@ function fixture() {
 
 beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(workspace.textDocuments).splice(0);
-    vi.mocked(workspace.workspaceFolders).splice(0);
+    (workspace.textDocuments as TextDocument[]).splice(0);
+    (workspace.workspaceFolders! as WorkspaceFolder[]).splice(0);
     vi.mocked(workspace.fs.stat).mockResolvedValue({ permissions: 0 } as never);
     vi.mocked(workspace.fs.isWritableFileSystem).mockReturnValue(true);
 });
@@ -64,7 +64,7 @@ beforeEach(() => {
 describe("IconWatcherController", () => {
     it("reconfigures per-root directory watchers and disposes their subscriptions", () => {
         const disposals: Array<ReturnType<typeof vi.fn>> = [];
-        vi.mocked(workspace.workspaceFolders).push({ uri: { toString: () => "file:///workspace" } } as never);
+        (workspace.workspaceFolders! as WorkspaceFolder[]).push({ uri: { toString: () => "file:///workspace" } } as never);
         vi.mocked(workspace.createFileSystemWatcher).mockImplementation(() => {
             const own = Array.from({ length: 4 }, () => vi.fn());
             disposals.push(...own);
@@ -102,7 +102,7 @@ describe("IconWatcherController", () => {
         const f = fixture();
         await f.controller.refreshNow(id);
         const before = f.content;
-        vi.mocked(workspace.textDocuments).splice(0);
+        (workspace.textDocuments as TextDocument[]).splice(0);
         vi.mocked(workspace.onDidCloseTextDocument).mock.calls[0][0](f.document);
         f.setSvg("changed");
         f.controller.handle(source, "update");

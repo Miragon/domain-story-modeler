@@ -23,14 +23,19 @@ Before opening a pull request, run:
 yarn typecheck
 yarn lint
 yarn test
+yarn test:browser
 yarn build
+yarn test:artifacts
+yarn package
+yarn test:package
+yarn test:extension
 yarn npm audit --all --severity high
 yarn npm audit --all --recursive --severity critical
 ```
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs for pull requests, pushes to `main`, merge queues, and manual dispatches. It checks linting, the Vitest suite, the complete build, exact dependency pins, changed dependencies on pull requests, and high/critical dependency advisories.
+`.github/workflows/ci.yml` runs for pull requests, pushes to `main`, merge queues, and manual dispatches. It checks linting, production and test typechecking, Vitest, Chromium, the clean build, minified artifacts, VSIX contracts, and the installed extension on Linux under Xvfb. It also checks exact dependency pins, changed dependencies on pull requests, and high/critical dependency advisories. The extension job uploads its tested VSIX and failure diagnostics.
 
 Branch protection should require the aggregate `ci` job. It succeeds only when every required job succeeds; the dependency-review job may be skipped only outside pull requests. Also require `Validate Conventional Commit title`.
 

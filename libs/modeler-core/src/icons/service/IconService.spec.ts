@@ -101,6 +101,21 @@ describe("IconService", () => {
         expect(JSON.parse(result.text)).toMatchObject({ domain: { actors: { Customer: "svg" } }, dst: [], custom: 12 });
     });
 
+    it("preserves v4 story content and metadata while reconciling icons", () => {
+        const f = fixture();
+        const document = createEmptyStory();
+        document.domainStory.title = "Retained title";
+        document.domainStory.businessObjects = [{ id: "actor-1", type: "domainStory:actorPerson" }];
+        document.iconSet.workObjects["Manual"] = "embedded";
+        const original = { ...document, metadata: { owner: "team" } };
+        const icon = { type: IconType.Actor, name: "Customer", svg: "svg", source: "file:///workspace/.egon/icons/actors/Customer.svg" };
+        const result = JSON.parse(f.service.reconcile("file:///workspace/story.egn", JSON.stringify(original), [icon]).text);
+        expect(result.domainStory).toEqual(original.domainStory);
+        expect(result.metadata).toEqual(original.metadata);
+        expect(result.iconSet.workObjects).toEqual(original.iconSet.workObjects);
+        expect(result.iconSet.actors).toEqual({ ...original.iconSet.actors, Customer: "svg" });
+    });
+
     it("skips empty SVGs and leaves ownership uncommitted after read failures", async () => {
         const f = fixture();
         f.add("file:///workspace", "Empty.svg", " \n");

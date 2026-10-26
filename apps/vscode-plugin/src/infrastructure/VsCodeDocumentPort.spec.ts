@@ -22,7 +22,7 @@ beforeEach(() => {
             return { line: before.length - 1, character: before.at(-1)!.length };
         },
     } as TextDocument;
-    vi.mocked(workspace.textDocuments).splice(0, Infinity, doc);
+    (workspace.textDocuments as TextDocument[]).splice(0, Infinity, doc);
     vi.mocked(workspace.fs.isWritableFileSystem).mockReturnValue(true);
     vi.mocked(workspace.fs.stat).mockResolvedValue({ permissions: 0 } as never);
     edit = { replace: vi.fn() };
@@ -68,7 +68,7 @@ describe("VsCodeDocumentPort", () => {
     });
 
     it("never reopens a closed document", async () => {
-        vi.mocked(workspace.textDocuments).splice(0);
+        (workspace.textDocuments as TextDocument[]).splice(0);
         await expect(port.read(id)).rejects.toThrow("no longer open");
         await expect(port.write(id, "new", 4, () => true)).rejects.toThrow("no longer open");
         expect(workspace.openTextDocument).not.toHaveBeenCalled();

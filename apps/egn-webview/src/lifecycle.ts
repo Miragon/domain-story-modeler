@@ -122,8 +122,9 @@ export function bootstrap(
 ): WebviewLifecycleHandle {
   const pageWindow = options.window ?? window;
   const page = options.document ?? document;
-  const container = page.getElementById("egon-io-container");
-  if (!container) throw new Error("Container for Egon.io modeler not found!");
+  const element = page.getElementById("egon-io-container");
+  if (!element) throw new Error("Container for Egon.io modeler not found!");
+  const container: HTMLElement = element;
 
   const state = normalizeWebviewState(readHostState(host));
   host.setState(state);
@@ -238,21 +239,20 @@ export function bootstrap(
       return;
     }
     const generation = importedGeneration;
-    void runOperation(async () => {
-      if (!canExport(generation)) return;
-      try {
-        const text = exportAndValidate();
-        if (text === baseline) return;
-        synchronizer.submit(currentWrite(text, generation));
-      } catch (error) {
-        reportFailure(
-          "import",
-          "Failed to export the domain story",
-          error,
-          "export",
-        );
-      }
-    });
+    if (!canExport(generation)) return;
+    try {
+      // Publish in the modeler's change callback so an immediate Save observes
+      // the dirty buffer instead of racing a queued export microtask.
+      const text = exportAndValidate();
+      if (text !== baseline) synchronizer.submit(currentWrite(text, generation));
+    } catch (error) {
+      reportFailure(
+        "import",
+        "Failed to export the domain story",
+        error,
+        "export",
+      );
+    }
   };
   const onRepair = (repair: ImportRepairData): void => {
     repairCapture?.push(repair);

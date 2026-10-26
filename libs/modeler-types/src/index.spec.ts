@@ -21,7 +21,7 @@ describe("@egon/modeler-types entrypoint", () => {
         const first = modelerTypes.createEmptyStory();
         const second = modelerTypes.createEmptyStory();
 
-        first.iconSet.actors.Custom = "<svg />";
+        first.iconSet.actors["Custom"] = "<svg />";
 
         expect(second.iconSet.actors).not.toHaveProperty("Custom");
         expect(first.iconSet.actors).not.toBe(second.iconSet.actors);

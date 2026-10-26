@@ -38,7 +38,7 @@ describe("WebviewMessageRouter", () => {
                 await Promise.resolve();
                 calls.push("first");
             })
-            .on("known", () => calls.push("second"));
+            .on("known", () => { calls.push("second"); });
 
         await router.dispatch({ type: "known", value: 1 }, "session");
 
