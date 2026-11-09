@@ -22,10 +22,10 @@
   "preview": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/Miragon/egon.io.git"
+    "url": "https://github.com/Miragon/domain-story-modeler.git"
   },
   "bugs": {
-    "url": "https://github.com/Miragon/egon.io/issues"
+    "url": "https://github.com/Miragon/domain-story-modeler/issues"
   },
   "engines": {
     "vscode": "^1.76.0"
