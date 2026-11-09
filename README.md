@@ -12,15 +12,15 @@
 <br />
 <div align="center">
     <a href="https://egon.io/">
-        <img src="https://raw.githubusercontent.com/Miragon/egon.io/main/vscode/images/egon-io-logo.png" alt="Egon.io Logo" height="180">
+        <img src="https://raw.githubusercontent.com/Miragon/domain-story-modeler/main/images/egon-io-logo.png" alt="Egon.io Logo" height="180">
     </a>
     <h3>Egon.io — The Domain Story Modeler</h3>
     <p>
         <i>A tool to edit Domain Stories in Visual Studio Code.</i>
         <br />
-        <a href="https://github.com/Miragon/egon.io/issues">Report Bug</a>
+        <a href="https://github.com/Miragon/domain-story-modeler/issues/new?template=bug-report.yml">Report Bug</a>
         ·
-        <a href="https://github.com/Miragon/egon.io/pulls">Request Feature</a>
+        <a href="https://github.com/Miragon/domain-story-modeler/issues/new?template=feature-request.yml">Request Feature</a>
     </p>
 </div>
 
@@ -89,4 +89,4 @@ Distributed under this [GPLv3](https://github.com/Miragon/domain-story-modeler/b
 
 [license-shield]: https://img.shields.io/badge/license-GPLv3-blue.svg?style=for-the-badge
 
-[license-url]: https://github.com/Miragon/egon.io/blob/dbd0fb34b29e9e1f38e29feb2075bfdff2bfef88/monorepo/egon/LICENSE
+[license-url]: https://github.com/Miragon/domain-story-modeler/blob/main/LICENSE

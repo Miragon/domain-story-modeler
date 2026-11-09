@@ -17,7 +17,7 @@
     ".": {
       "release-type": "node",
       "component": "domain-story-modeler",
-      "initial-version": "0.2.1",
+      "initial-version": "0.3.0",
       "extra-files": [
         {
           "type": "json",
