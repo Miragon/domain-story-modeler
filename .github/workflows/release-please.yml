@@ -1,9 +1,21 @@
 name: Release Please
 
+# Trusted publishing (OIDC, no token) is bound to this file name and to the `vscode-marketplace`
+# environment of the publish job: the publisher miragon-gmbh's Trusted Publishing policy on the
+# VS Code Marketplace and the extension's trusted publisher on Open VSX. Renaming the file or the
+# environment breaks publishing until both are updated.
+#
+# A release takes three steps: build and check the VSIX (no environment), one approval, publish that
+# very VSIX to both marketplaces. A build that fails publishes nothing.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and test the VSIX without releasing or publishing"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -15,17 +27,92 @@ concurrency:
 jobs:
   release-please:
     name: Maintain release PR
+    # A release runs from main only; a dry run releases nothing and runs on any branch.
+    if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created || 'false' }}
     steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+      - if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           client-id: ${{ vars.RELEASE_PLEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
 
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - if: ${{ !inputs.dry_run }}
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ steps.app-token.outputs.token }}
           target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # The same checks as CI's test-extension job, on the VSIX that publish uploads.
+  build:
+    name: build / vsix
+    needs: release-please
+    if: inputs.dry_run || needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - run: yarn playwright install --with-deps chromium
+      - run: yarn build
+      - run: yarn test:artifacts
+      - run: yarn package
+      - run: yarn test:package
+      - run: xvfb-run -a yarn test:extension
+      # The release is already tagged when this fails, so the diagnostics are all there is to tell why.
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: extension-diagnostics
+          path: .context/extension-diagnostics
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vsix
+          path: dist/egon-vscode-extension.vsix
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish / ${{ matrix.marketplace }}
+    needs: [release-please, build]
+    if: ${{ !inputs.dry_run && needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: vscode-marketplace
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        marketplace: [vscode-marketplace, open-vsx]
+    env:
+      VSIX: ${{ github.workspace }}/vsix/egon-vscode-extension.vsix
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # vsce on the repository's pinned version, 4.1.0 or later for the Marketplace's OIDC exchange.
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: vsix
+          path: vsix
+      # --skip-duplicate lets a re-run pass a marketplace that has the version already.
+      - if: matrix.marketplace == 'vscode-marketplace'
+        run: yarn vsce publish --packagePath "$VSIX" --skip-duplicate --oidc
+      # ovsx is no dependency of the repository, so npx fetches it: pinned, it cannot change under a
+      # release.
+      - if: matrix.marketplace == 'open-vsx'
+        run: npx --yes ovsx@1.3.0 publish --packagePath "$VSIX" --skip-duplicate --trusted-publishing
